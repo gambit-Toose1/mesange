@@ -1,8 +1,8 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Dependencies, HTTPException, status, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, get_db, SessionLocal, init_db
-from models import Base, User, Room, Message, hash_password, verify_password
+from models import Base, User, Room, Message, hash_password, verify_password, generate_salt
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uvicorn
@@ -12,23 +12,23 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-print("📦 Инициализация базы данных...")
+print("\uD83D\uDCE2 Python Messenger Pro")
 init_db()
 
 app = FastAPI(title="Python Messenger Pro")
 
 app.add_middleware(
-    CORSMiddleware,
+    CORSMiddleware, 
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=True, 
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 if not os.path.exists("index.html"):
-    print("❌ ОШИБКА: Файл index.html не найден!")
+    print("\u26A0\uFE0F No index.html found!")
 else:
-    print("✅ Файл index.html найден.")
+    print("\u2705 index.html found")
 
 class ConnectionManager:
     def __init__(self):
@@ -36,7 +36,6 @@ class ConnectionManager:
         self.online_users = {}
 
     async def connect(self, websocket, room_id, username, user_id):
-        # ⚠️ НЕТ websocket.accept() - вызывается ТОЛЬКО в endpoint!
         if room_id not in self.active_connections:
             self.active_connections[room_id] = []
         self.active_connections[room_id].append({
@@ -50,7 +49,7 @@ class ConnectionManager:
             "user_id": user_id,
             "joined_at": datetime.utcnow()
         }
-        logger.info(f"✅ {username} подключился к комнате {room_id}")
+        logger.info(f"\u2705 {username} joined room {room_id}")
 
     def disconnect(self, websocket, room_id, username):
         if room_id in self.active_connections:
@@ -62,7 +61,7 @@ class ConnectionManager:
                 del self.active_connections[room_id]
         if username in self.online_users:
             del self.online_users[username]
-        logger.info(f"❌ {username} отключился")
+        logger.info(f"\uD83D\uDC4B {username} disconnected")
 
     async def broadcast_to_room(self, room_id, message):
         if room_id in self.active_connections:
@@ -77,13 +76,13 @@ class ConnectionManager:
             try:
                 await self.online_users[username]["websocket"].send_json({
                     "type": "kicked",
-                    "content": "Вы были заблокированы администратором"
+                    "content": "You have been banned from the chat"
                 })
                 await self.online_users[username]["websocket"].close()
             except:
                 pass
             del self.online_users[username]
-            logger.info(f"🚫 {username} был кикнут")
+            logger.info(f"\uD83D\uDEAB {username} kicked")
 
     def get_online_users(self):
         return list(self.online_users.keys())
@@ -98,12 +97,12 @@ def get_current_user(username: str, db: Session):
     if not user:
         return None
     if user.is_banned:
-        raise HTTPException(status_code=403, detail="Аккаунт заблокирован")
+        raise HTTPException(status_code=403, detail="You are banned")
     return user
 
 def check_admin(user: User):
     if not user or not user.is_admin:
-        raise HTTPException(status_code=403, detail="Требуется права администратора")
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 @app.get("/")
 async def get():
@@ -111,13 +110,13 @@ async def get():
         with open("index.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
-        return HTMLResponse(content="<h1>❌ index.html не найден!</h1>", status_code=500)
+        return HTMLResponse(content="<h1>\u26A0\uFE0F index.html not found</h1>", status_code=500)
 
 @app.get("/api/health")
 async def health_check():
     return {
         "status": "ok",
-        "message": "Сервер работает",
+        "message": "Server is running",
         "online_users": manager.get_online_count(),
         "timestamp": datetime.utcnow().isoformat()
     }
@@ -125,43 +124,47 @@ async def health_check():
 @app.post("/api/register")
 async def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if len(username) < 3:
-        return JSONResponse({"success": False, "error": "Имя слишком короткое (минимум 3 символа)"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Username must be at least 3 characters"}, status_code=400)
     if len(password) < 6:
-        return JSONResponse({"success": False, "error": "Пароль слишком короткий (минимум 6 символов)"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Password must be at least 6 characters"}, status_code=400)
 
     existing = db.query(User).filter(User.username == username).first()
     if existing:
-        return JSONResponse({"success": False, "error": "Пользователь уже существует"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Username already exists"}, status_code=400)
 
     is_first_user = db.query(User).count() == 0
-
-    user = User(username=username, password_hash=hash_password(password), is_admin=is_first_user)
+    
+    # Generate salt and hash password
+    salt = generate_salt()
+    password_hash = hash_password(password, salt)
+    
+    user = User(username=username, password_hash=password_hash, salt=salt, is_admin=is_first_user)
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    personal_room = Room(name=f"private_{username}", description=f"Личный чат {username}", is_private=True, created_by=user.id)
+    personal_room = Room(name=f"private_{username}", description=f"Private room for {username}", is_private=True, created_by=user.id)
     db.add(personal_room)
     db.commit()
 
     if not db.query(Room).filter(Room.name == "general").first():
-        general_room = Room(name="general", description="Общий чат", created_by=user.id)
+        general_room = Room(name="general", description="General chat", created_by=user.id)
         db.add(general_room)
         db.commit()
 
-    logger.info(f"✅ Зарегистрирован: {username} (Админ: {is_first_user})")
+    logger.info(f"\u2705 User registered: {username} (admin: {is_first_user})")
     return {"success": True, "username": username, "is_admin": is_first_user, "user_id": user.id}
 
 @app.post("/api/login")
 async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        return JSONResponse({"success": False, "error": "Пользователь не найден"}, status_code=401)
+        return JSONResponse({"success": False, "error": "Invalid credentials"}, status_code=401)
     if user.is_banned:
-        return JSONResponse({"success": False, "error": "Аккаунт заблокирован"}, status_code=403)
-    if not verify_password(password, user.password_hash):
-        return JSONResponse({"success": False, "error": "Неверный пароль"}, status_code=401)
-    logger.info(f"✅ Вход: {username}")
+        return JSONResponse({"success": False, "error": "You are banned"}, status_code=403)
+    if not verify_password(password, user.password_hash, user.salt):
+        return JSONResponse({"success": False, "error": "Invalid credentials"}, status_code=401)
+    logger.info(f"\u2705 User logged in: {username}")
     return {"success": True, "username": username, "user_id": user.id, "is_admin": user.is_admin}
 
 @app.get("/api/rooms")
@@ -172,15 +175,15 @@ async def get_rooms(db: Session = Depends(get_db)):
 @app.post("/api/rooms")
 async def create_room(name: str = Form(...), description: str = Form(""), username: str = Form(None), db: Session = Depends(get_db)):
     if len(name) < 3:
-        return JSONResponse({"success": False, "error": "Название слишком короткое"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Room name must be at least 3 characters"}, status_code=400)
     existing = db.query(Room).filter(Room.name == name).first()
     if existing:
-        return JSONResponse({"success": False, "error": "Комната уже существует"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Room already exists"}, status_code=400)
     user = db.query(User).filter(User.username == username).first()
     room = Room(name=name, description=description, created_by=user.id if user else None)
     db.add(room)
     db.commit()
-    logger.info(f"🏠 Создана комната: {name}")
+    logger.info(f"\uD83D\uDCCE Room created: {name}")
     return {"success": True, "room_id": room.id, "name": name}
 
 @app.get("/api/messages/{room_id}")
@@ -189,8 +192,11 @@ async def get_messages(room_id: int, limit: int = 50, db: Session = Depends(get_
     result = []
     for msg in reversed(messages):
         result.append({
-            "id": msg.id, "content": msg.content, "username": msg.user.username if msg.user else "Unknown",
-            "user_id": msg.user_id, "created_at": msg.created_at.isoformat()
+            "id": msg.id, 
+            "content": msg.content, 
+            "username": msg.user.username if msg.user else "Unknown",
+            "user_id": msg.user_id, 
+            "created_at": msg.created_at.isoformat()
         })
     return result
 
@@ -200,13 +206,13 @@ async def delete_room(room_id: int, username: str, db: Session = Depends(get_db)
     check_admin(user)
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
-        return JSONResponse({"success": False, "error": "Комната не найдена"}, status_code=404)
+        return JSONResponse({"success": False, "error": "Room not found"}, status_code=404)
     if room.name == "general":
-        return JSONResponse({"success": False, "error": "Нельзя удалить общую комнату"}, status_code=403)
+        return JSONResponse({"success": False, "error": "Cannot delete general room"}, status_code=403)
     db.delete(room)
     db.commit()
-    await manager.broadcast_to_room(room_id, {"type": "system", "content": f"Комната #{room.name} была удалена администратором"})
-    logger.info(f"🗑️ Комната {room.name} удалена")
+    await manager.broadcast_to_room(room_id, {"type": "system", "content": f"Room #{room.name} has been deleted"})
+    logger.info(f"\uD83D\uDDD1\uFE0F Room {room.name} deleted")
     return {"success": True}
 
 @app.delete("/api/messages/{message_id}")
@@ -215,11 +221,11 @@ async def delete_message(message_id: int, username: str, db: Session = Depends(g
     check_admin(user)
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
-        return JSONResponse({"success": False, "error": "Сообщение не найдено"}, status_code=404)
+        return JSONResponse({"success": False, "error": "Message not found"}, status_code=404)
     message.is_deleted = True
-    message.content = "[Сообщение удалено администратором]"
+    message.content = "[Message deleted by admin]"
     db.commit()
-    await manager.broadcast_to_room(message.room_id, {"type": "system", "content": f"Сообщение от {message.user.username} было удалено"})
+    await manager.broadcast_to_room(message.room_id, {"type": "system", "content": f"{message.user.username} message was deleted"})
     return {"success": True}
 
 @app.get("/api/admin/users")
@@ -238,13 +244,13 @@ async def ban_user(user_id: int, username: str, db: Session = Depends(get_db)):
     check_admin(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        return JSONResponse({"success": False, "error": "Пользователь не найден"}, status_code=404)
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
     if user.is_admin:
-        return JSONResponse({"success": False, "error": "Нельзя забанить администратора"}, status_code=403)
+        return JSONResponse({"success": False, "error": "Cannot ban admin"}, status_code=403)
     user.is_banned = True
     db.commit()
     await manager.kick_user(user.username)
-    logger.info(f"🚫 {user.username} забанен")
+    logger.info(f"\uD83D\uDEAB {user.username} banned")
     return {"success": True}
 
 @app.post("/api/admin/unban/{user_id}")
@@ -253,10 +259,10 @@ async def unban_user(user_id: int, username: str, db: Session = Depends(get_db))
     check_admin(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        return JSONResponse({"success": False, "error": "Пользователь не найден"}, status_code=404)
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
     user.is_banned = False
     db.commit()
-    logger.info(f"✅ {user.username} разбанен")
+    logger.info(f"\u2705 {user.username} unbanned")
     return {"success": True}
 
 @app.post("/api/admin/make-admin/{user_id}")
@@ -265,10 +271,10 @@ async def make_admin(user_id: int, username: str, db: Session = Depends(get_db))
     check_admin(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        return JSONResponse({"success": False, "error": "Пользователь не найден"}, status_code=404)
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
     user.is_admin = True
     db.commit()
-    logger.info(f"👑 {user.username} стал админом")
+    logger.info(f"\uD83D\uDC51 {user.username} made admin")
     return {"success": True}
 
 @app.get("/api/admin/online")
@@ -277,7 +283,8 @@ async def get_online_users(username: str, db: Session = Depends(get_db)):
     check_admin(user)
     return {"online": manager.get_online_users(), "count": manager.get_online_count()}
 
-# ✅ ДОБАВЛЕН ОТСУТСТВУЮЩИЙ ENDPOINT
+# ==================== ENDPOINTS
+
 @app.get("/api/admin/stats")
 async def get_stats(username: str, db: Session = Depends(get_db)):
     user = get_current_user(username, db)
@@ -292,9 +299,8 @@ async def get_stats(username: str, db: Session = Depends(get_db)):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # ✅ ПРИНИМАЕМ СОЕДИНЕНИЕ ТОЛЬКО ЗДЕСЬ (ОДИН РАЗ!)
     await websocket.accept()
-    logger.info("🔌 WebSocket подключен")
+    logger.info("\uD83D\uDC4C WebSocket connected")
 
     current_room = None
     current_username = None
@@ -313,7 +319,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 db = SessionLocal()
                 user = db.query(User).filter(User.username == current_username).first()
                 if user and user.is_banned:
-                    await websocket.send_json({"type": "kicked", "content": "Ваш аккаунт заблокирован"})
+                    await websocket.send_json({"type": "kicked", "content": "You are banned"})
                     await websocket.close()
                     db.close()
                     return
@@ -323,9 +329,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     manager.disconnect(websocket, current_room, current_username)
 
                 current_room = room_id
-                # ✅ НЕТ websocket.accept() в manager.connect()!
                 await manager.connect(websocket, room_id, current_username, current_user_id)
-                await manager.broadcast_to_room(room_id, {"type": "system", "content": f"{current_username} присоединился к чату"})
+                await manager.broadcast_to_room(room_id, {"type": "system", "content": f"{current_username} joined the chat"})
 
             elif action == "message":
                 if current_room and current_username:
@@ -340,31 +345,34 @@ async def websocket_endpoint(websocket: WebSocket):
                         db.commit()
                         db.close()
                         await manager.broadcast_to_room(current_room, {
-                            "type": "message", "content": content, "username": current_username,
-                            "user_id": current_user_id, "created_at": datetime.utcnow().isoformat()
+                            "type": "message", 
+                            "content": content, 
+                            "username": current_username,
+                            "user_id": current_user_id, 
+                            "created_at": datetime.utcnow().isoformat()
                         })
                     else:
                         db.close()
-                        await websocket.send_json({"type": "kicked", "content": "Ваш аккаунт заблокирован"})
+                        await websocket.send_json({"type": "kicked", "content": "You are banned"})
                         await websocket.close()
                         return
 
             elif action == "leave_room":
                 if current_room:
-                    await manager.broadcast_to_room(current_room, {"type": "system", "content": f"{current_username} покинул чат"})
+                    await manager.broadcast_to_room(current_room, {"type": "system", "content": f"{current_username} left the chat"})
                     manager.disconnect(websocket, current_room, current_username)
                     current_room = None
 
     except WebSocketDisconnect:
-        logger.info("🔌 WebSocket отключен")
+        logger.info("\uD83D\uDC4C WebSocket disconnected")
         if current_room and current_username:
-            await manager.broadcast_to_room(current_room, {"type": "system", "content": f"{current_username} отключился"})
+            await manager.broadcast_to_room(current_room, {"type": "system", "content": f"{current_username} disconnected"})
             manager.disconnect(websocket, current_room, current_username)
     except Exception as e:
-        logger.error(f"Ошибка WebSocket: {e}")
+        logger.error(f"\u26A0\uFE0F WebSocket error: {e}")
         if current_room and current_username:
             manager.disconnect(websocket, current_room, current_username)
 
 if __name__ == "__main__":
-    print("🚀 Запуск сервера на http://127.0.0.1:8000")
+    print("\uD83D\uDCF0 Server running at http://127.0.0.1:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
