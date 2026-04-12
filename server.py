@@ -1,13 +1,17 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Dependencies, HTTPException, status, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Dependencies, HTTPException, status, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from database import engine, get_db, SessionLocal, init_db
 from models import Base, User, Room, Message, hash_password, verify_password, generate_salt
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 import uvicorn
 import os
 import logging
+import time
+from collections import defaultdict
+from threading import Lock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,6 +33,21 @@ if not os.path.exists("index.html"):
     print("\u26A0\uFE0F No index.html found!")
 else:
     print("\u2705 index.html found")
+
+# Rate limiting storage
+rate_limit_store = defaultdict(list)
+rate_limit_lock = Lock()
+
+def check_rate_limit(username: str, limit: int = 5, window_seconds: int = 60) -> bool:
+    """Check if user exceeded rate limit"""
+    now = time.time()
+    with rate_limit_lock:
+        # Clean old entries
+        rate_limit_store[username] = [t for t in rate_limit_store[username] if now - t < window_seconds]
+        if len(rate_limit_store[username]) >= limit:
+            return False
+        rate_limit_store[username].append(now)
+        return True
 
 class ConnectionManager:
     def __init__(self):
@@ -104,6 +123,32 @@ def check_admin(user: User):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
 
+def check_room_access(room: Room, user: User, db: Session):
+    """Check if user has access to private room"""
+    if not room.is_private:
+        return True
+    if room.created_by == user.id:
+        return True
+    # Check if user is in the room's allowed users (future feature)
+    return False
+
+# Pydantic models for validation
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6, max_length=100)
+
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+class CreateRoomRequest(BaseModel):
+    name: str = Field(..., min_length=3, max_length=50)
+    description: str = Field(default="", max_length=500)
+    is_private: bool = Field(default=False)
+
+class EditMessageRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
 @app.get("/")
 async def get():
     try:
@@ -122,7 +167,14 @@ async def health_check():
     }
 
 @app.post("/api/register")
-async def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+async def register(request: RegisterRequest, db: Session = Depends(get_db)):
+    username = request.username.strip()
+    password = request.password
+    
+    # Rate limiting
+    if not check_rate_limit(f"register_{username}"):
+        return JSONResponse({"success": False, "error": "Too many requests. Try again later."}, status_code=429)
+    
     if len(username) < 3:
         return JSONResponse({"success": False, "error": "Username must be at least 3 characters"}, status_code=400)
     if len(password) < 6:
@@ -156,7 +208,14 @@ async def register(username: str = Form(...), password: str = Form(...), db: Ses
     return {"success": True, "username": username, "is_admin": is_first_user, "user_id": user.id}
 
 @app.post("/api/login")
-async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    username = request.username.strip()
+    password = request.password
+    
+    # Rate limiting
+    if not check_rate_limit(f"login_{username}"):
+        return JSONResponse({"success": False, "error": "Too many login attempts. Try again later."}, status_code=429)
+    
     user = db.query(User).filter(User.username == username).first()
     if not user:
         return JSONResponse({"success": False, "error": "Invalid credentials"}, status_code=401)
@@ -168,27 +227,49 @@ async def login(username: str = Form(...), password: str = Form(...), db: Sessio
     return {"success": True, "username": username, "user_id": user.id, "is_admin": user.is_admin}
 
 @app.get("/api/rooms")
-async def get_rooms(db: Session = Depends(get_db)):
+async def get_rooms(username: str = Query(None), db: Session = Depends(get_db)):
     rooms = db.query(Room).all()
-    return [{"id": r.id, "name": r.name, "description": r.description, "is_private": r.is_private, "created_by": r.created_by} for r in rooms]
+    result = []
+    for r in rooms:
+        # Check access for private rooms
+        if r.is_private and username:
+            user = db.query(User).filter(User.username == username).first()
+            if user and r.created_by != user.id:
+                continue  # Skip private rooms user doesn't own
+        result.append({
+            "id": r.id, 
+            "name": r.name, 
+            "description": r.description, 
+            "is_private": r.is_private, 
+            "created_by": r.created_by
+        })
+    return result
 
 @app.post("/api/rooms")
-async def create_room(name: str = Form(...), description: str = Form(""), username: str = Form(None), db: Session = Depends(get_db)):
+async def create_room(request: CreateRoomRequest, username: str = Form(None), db: Session = Depends(get_db)):
+    name = request.name.strip()
+    description = request.description.strip()
+    is_private = request.is_private
+    
     if len(name) < 3:
         return JSONResponse({"success": False, "error": "Room name must be at least 3 characters"}, status_code=400)
     existing = db.query(Room).filter(Room.name == name).first()
     if existing:
         return JSONResponse({"success": False, "error": "Room already exists"}, status_code=400)
     user = db.query(User).filter(User.username == username).first()
-    room = Room(name=name, description=description, created_by=user.id if user else None)
+    room = Room(name=name, description=description, is_private=is_private, created_by=user.id if user else None)
     db.add(room)
     db.commit()
-    logger.info(f"\uD83D\uDCCE Room created: {name}")
+    logger.info(f"\uD83D\uDCCE Room created: {name} (private: {is_private})")
     return {"success": True, "room_id": room.id, "name": name}
 
 @app.get("/api/messages/{room_id}")
-async def get_messages(room_id: int, limit: int = 50, db: Session = Depends(get_db)):
-    messages = db.query(Message).filter(Message.room_id == room_id, Message.is_deleted == False).order_by(Message.created_at.desc()).limit(limit).all()
+async def get_messages(room_id: int, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    messages = db.query(Message).filter(
+        Message.room_id == room_id, 
+        Message.is_deleted == False
+    ).order_by(Message.created_at.desc()).offset(offset).limit(limit).all()
+    
     result = []
     for msg in reversed(messages):
         result.append({
@@ -196,7 +277,8 @@ async def get_messages(room_id: int, limit: int = 50, db: Session = Depends(get_
             "content": msg.content, 
             "username": msg.user.username if msg.user else "Unknown",
             "user_id": msg.user_id, 
-            "created_at": msg.created_at.isoformat()
+            "created_at": msg.created_at.isoformat(),
+            "is_edited": msg.is_edited
         })
     return result
 
@@ -218,15 +300,41 @@ async def delete_room(room_id: int, username: str, db: Session = Depends(get_db)
 @app.delete("/api/messages/{message_id}")
 async def delete_message(message_id: int, username: str, db: Session = Depends(get_db)):
     user = get_current_user(username, db)
-    check_admin(user)
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         return JSONResponse({"success": False, "error": "Message not found"}, status_code=404)
+    
+    # Allow user to delete own message or admin to delete any
+    if message.user_id != user.id and not user.is_admin:
+        return JSONResponse({"success": False, "error": "You can only delete your own messages"}, status_code=403)
+    
     message.is_deleted = True
-    message.content = "[Message deleted by admin]"
+    message.content = "[Message deleted]"
     db.commit()
-    await manager.broadcast_to_room(message.room_id, {"type": "system", "content": f"{message.user.username} message was deleted"})
+    await manager.broadcast_to_room(message.room_id, {"type": "system", "content": f"Message was deleted"})
     return {"success": True}
+
+@app.put("/api/messages/{message_id}")
+async def edit_message(message_id: int, request: EditMessageRequest, username: str, db: Session = Depends(get_db)):
+    user = get_current_user(username, db)
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        return JSONResponse({"success": False, "error": "Message not found"}, status_code=404)
+    
+    # Allow user to edit own message or admin to edit any
+    if message.user_id != user.id and not user.is_admin:
+        return JSONResponse({"success": False, "error": "You can only edit your own messages"}, status_code=403)
+    
+    message.content = request.content.strip()
+    message.is_edited = True
+    db.commit()
+    await manager.broadcast_to_room(message.room_id, {
+        "type": "message_edited",
+        "message_id": message.id,
+        "content": message.content,
+        "edited_by": username
+    })
+    return {"success": True, "content": message.content, "is_edited": True}
 
 @app.get("/api/admin/users")
 async def get_all_users(username: str, db: Session = Depends(get_db)):
@@ -283,8 +391,6 @@ async def get_online_users(username: str, db: Session = Depends(get_db)):
     check_admin(user)
     return {"online": manager.get_online_users(), "count": manager.get_online_count()}
 
-# ==================== ENDPOINTS
-
 @app.get("/api/admin/stats")
 async def get_stats(username: str, db: Session = Depends(get_db)):
     user = get_current_user(username, db)
@@ -311,6 +417,7 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("action")
 
+
             if action == "join_room":
                 room_id = data.get("room_id")
                 current_username = data.get("username")
@@ -323,6 +430,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.close()
                     db.close()
                     return
+                
+                # Check private room access
+                room = db.query(Room).filter(Room.id == room_id).first()
+                if room and room.is_private and room.created_by != user.id:
+                    await websocket.send_json({"type": "kicked", "content": "Access denied to private room"})
+                    await websocket.close()
+                    db.close()
+                    return
+                
                 db.close()
 
                 if current_room:
@@ -349,7 +465,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             "content": content, 
                             "username": current_username,
                             "user_id": current_user_id, 
-                            "created_at": datetime.utcnow().isoformat()
+                            "created_at": datetime.utcnow().isoformat(),
+                            "is_edited": False
                         })
                     else:
                         db.close()
