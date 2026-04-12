@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 import hashlib
+import os
 
 class User(Base):
     __tablename__ = "users"
@@ -10,6 +11,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    salt = Column(String, nullable=False)  # Added salt for secure password hashing
     is_admin = Column(Boolean, default=False)
     is_banned = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -44,8 +46,14 @@ class Message(Base):
     user = relationship("User", back_populates="messages")
     room = relationship("Room", back_populates="messages")
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password: str, salt: str) -> str:
+    """Hash password with salt (SHA256)"""
+    return hashlib.sha256((password + salt).encode()).hexdigest()
 
-def verify_password(password: str, hashed: str) -> bool:
-    return hash_password(password) == hashed
+def verify_password(password: str, hashed: str, salt: str) -> bool:
+    """Verify password with salt"""
+    return hash_password(password, salt) == hashed
+
+def generate_salt() -> str:
+    """Generate random salt (32 bytes in hex)"""
+    return os.urandom(32).hex()
