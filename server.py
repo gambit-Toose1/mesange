@@ -3,13 +3,14 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from database import engine, get_db, SessionLocal, init_db
-from models import Base, User, Room, Message, hash_password, verify_password, generate_salt
+from models import Base, User, Room, Message, DirectMessage, hash_password, verify_password, generate_salt
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import uvicorn
 import os
 import logging
 import time
+import json
 from collections import defaultdict
 from threading import Lock
 
@@ -38,21 +39,21 @@ else:
 rate_limit_store = defaultdict(list)
 rate_limit_lock = Lock()
 
-def check_rate_limit(username: str, limit: int = 5, window_seconds: int = 60) -> bool:
+def check_rate_limit(identifier: str, limit: int = 5, window_seconds: int = 60) -> bool:
     """Check if user exceeded rate limit"""
     now = time.time()
     with rate_limit_lock:
-        # Clean old entries
-        rate_limit_store[username] = [t for t in rate_limit_store[username] if now - t < window_seconds]
-        if len(rate_limit_store[username]) >= limit:
+        rate_limit_store[identifier] = [t for t in rate_limit_store[identifier] if now - t < window_seconds]
+        if len(rate_limit_store[identifier]) >= limit:
             return False
-        rate_limit_store[username].append(now)
+        rate_limit_store[identifier].append(now)
         return True
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections = {}
         self.online_users = {}
+        self.peer_connections = {}  # For WebRTC: username -> websocket
 
     async def connect(self, websocket, room_id, username, user_id):
         if room_id not in self.active_connections:
@@ -68,6 +69,14 @@ class ConnectionManager:
             "user_id": user_id,
             "joined_at": datetime.utcnow()
         }
+        # Update user online status
+        db = SessionLocal()
+        user = db.query(User).filter(User.username == username).first()
+        if user:
+            user.is_online = True
+            user.last_seen = datetime.utcnow()
+            db.commit()
+        db.close()
         logger.info(f"\u2705 {username} joined room {room_id}")
 
     def disconnect(self, websocket, room_id, username):
@@ -80,6 +89,14 @@ class ConnectionManager:
                 del self.active_connections[room_id]
         if username in self.online_users:
             del self.online_users[username]
+        # Update user offline status
+        db = SessionLocal()
+        user = db.query(User).filter(User.username == username).first()
+        if user:
+            user.is_online = False
+            user.last_seen = datetime.utcnow()
+            db.commit()
+        db.close()
         logger.info(f"\uD83D\uDC4B {username} disconnected")
 
     async def broadcast_to_room(self, room_id, message):
@@ -89,6 +106,16 @@ class ConnectionManager:
                     await conn["websocket"].send_json(message)
                 except:
                     pass
+
+    async def send_to_user(self, username, message):
+        """Send message to specific user if online"""
+        if username in self.online_users:
+            try:
+                await self.online_users[username]["websocket"].send_json(message)
+                return True
+            except:
+                pass
+        return False
 
     async def kick_user(self, username):
         if username in self.online_users:
@@ -109,6 +136,9 @@ class ConnectionManager:
     def get_online_count(self):
         return len(self.online_users)
 
+    def is_user_online(self, username):
+        return username in self.online_users
+
 manager = ConnectionManager()
 
 def get_current_user(username: str, db: Session):
@@ -122,15 +152,6 @@ def get_current_user(username: str, db: Session):
 def check_admin(user: User):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
-
-def check_room_access(room: Room, user: User, db: Session):
-    """Check if user has access to private room"""
-    if not room.is_private:
-        return True
-    if room.created_by == user.id:
-        return True
-    # Check if user is in the room's allowed users (future feature)
-    return False
 
 # Pydantic models for validation
 class RegisterRequest(BaseModel):
@@ -147,6 +168,10 @@ class CreateRoomRequest(BaseModel):
     is_private: bool = Field(default=False)
 
 class EditMessageRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+class DMRequest(BaseModel):
+    receiver: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1, max_length=2000)
 
 @app.get("/")
@@ -171,7 +196,6 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     username = request.username.strip()
     password = request.password
     
-    # Rate limiting
     if not check_rate_limit(f"register_{username}"):
         return JSONResponse({"success": False, "error": "Too many requests. Try again later."}, status_code=429)
     
@@ -186,11 +210,10 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
     is_first_user = db.query(User).count() == 0
     
-    # Generate salt and hash password
     salt = generate_salt()
     password_hash = hash_password(password, salt)
     
-    user = User(username=username, password_hash=password_hash, salt=salt, is_admin=is_first_user)
+    user = User(username=username, password_hash=password_hash, salt=salt, is_admin=is_first_user, is_online=False)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -207,12 +230,12 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     logger.info(f"\u2705 User registered: {username} (admin: {is_first_user})")
     return {"success": True, "username": username, "is_admin": is_first_user, "user_id": user.id}
 
+
 @app.post("/api/login")
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     username = request.username.strip()
     password = request.password
     
-    # Rate limiting
     if not check_rate_limit(f"login_{username}"):
         return JSONResponse({"success": False, "error": "Too many login attempts. Try again later."}, status_code=429)
     
@@ -223,6 +246,12 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         return JSONResponse({"success": False, "error": "You are banned"}, status_code=403)
     if not verify_password(password, user.password_hash, user.salt):
         return JSONResponse({"success": False, "error": "Invalid credentials"}, status_code=401)
+    
+    # Update online status
+    user.is_online = True
+    user.last_seen = datetime.utcnow()
+    db.commit()
+    
     logger.info(f"\u2705 User logged in: {username}")
     return {"success": True, "username": username, "user_id": user.id, "is_admin": user.is_admin}
 
@@ -231,11 +260,10 @@ async def get_rooms(username: str = Query(None), db: Session = Depends(get_db)):
     rooms = db.query(Room).all()
     result = []
     for r in rooms:
-        # Check access for private rooms
         if r.is_private and username:
             user = db.query(User).filter(User.username == username).first()
             if user and r.created_by != user.id:
-                continue  # Skip private rooms user doesn't own
+                continue
         result.append({
             "id": r.id, 
             "name": r.name, 
@@ -282,6 +310,116 @@ async def get_messages(room_id: int, limit: int = 50, offset: int = 0, db: Sessi
         })
     return result
 
+# ============ DM ENDPOINTS ============
+
+@app.get("/api/dm")
+async def get_dm_conversations(username: str = Query(...), db: Session = Depends(get_db)):
+    """Get list of DM conversations for a user"""
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
+    
+    # Get users the current user has chatted with
+    sent = db.query(DirectMessage.receiver_id).filter(DirectMessage.sender_id == user.id).distinct().all()
+    received = db.query(DirectMessage.sender_id).filter(DirectMessage.receiver_id == user.id).distinct().all()
+    
+    user_ids = set([r[0] for r in sent] + [r[0] for r in received])
+    user_ids.discard(user.id)  # Remove self
+    
+    conversations = []
+    for uid in user_ids:
+        other_user = db.query(User).filter(User.id == uid).first()
+        if other_user:
+            # Get last message
+            last_msg = db.query(DirectMessage).filter(
+                ((DirectMessage.sender_id == user.id) & (DirectMessage.receiver_id == uid)) |
+                ((DirectMessage.sender_id == uid) & (DirectMessage.receiver_id == user.id))
+            ).order_by(DirectMessage.created_at.desc()).first()
+            
+            # Unread count
+            unread = db.query(DirectMessage).filter(
+                DirectMessage.receiver_id == user.id,
+                DirectMessage.sender_id == uid,
+                DirectMessage.is_read == False
+            ).count()
+            
+            conversations.append({
+                "user_id": other_user.id,
+                "username": other_user.username,
+                "is_online": manager.is_user_online(other_user.username),
+                "last_message": last_msg.content if last_msg else "",
+                "last_message_at": last_msg.created_at.isoformat() if last_msg else None,
+                "unread_count": unread
+            })
+    
+    return sorted(conversations, key=lambda x: x["last_message_at"] or "", reverse=True)
+
+@app.get("/api/dm/{other_user_id}")
+async def get_dm_messages(other_user_id: int, username: str = Query(...), limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    """Get DM messages between two users"""
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
+    
+    other_user = db.query(User).filter(User.id == other_user_id).first()
+    if not other_user:
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
+    
+    messages = db.query(DirectMessage).filter(
+        ((DirectMessage.sender_id == user.id) & (DirectMessage.receiver_id == other_user_id)) |
+        ((DirectMessage.sender_id == other_user_id) & (DirectMessage.receiver_id == user.id))
+    ).order_by(DirectMessage.created_at.desc()).offset(offset).limit(limit).all()
+    
+    # Mark messages as read
+    for msg in messages:
+        if msg.receiver_id == user.id and not msg.is_read:
+            msg.is_read = True
+    db.commit()
+    
+    result = []
+    for msg in reversed(messages):
+        result.append({
+            "id": msg.id,
+            "content": msg.content,
+            "sender_id": msg.sender_id,
+            "receiver_id": msg.receiver_id,
+            "is_mine": msg.sender_id == user.id,
+            "created_at": msg.created_at.isoformat()
+        })
+    return result
+
+@app.post("/api/dm")
+async def send_dm(request: DMRequest, username: str = Query(...), db: Session = Depends(get_db)):
+    """Send a direct message"""
+    sender = db.query(User).filter(User.username == username).first()
+    if not sender:
+        return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
+    
+    receiver = db.query(User).filter(User.username == request.receiver).first()
+    if not receiver:
+        return JSONResponse({"success": False, "error": "Receiver not found"}, status_code=404)
+    
+    if sender.id == receiver.id:
+        return JSONResponse({"success": False, "error": "Cannot send DM to yourself"}, status_code=400)
+    
+    dm = DirectMessage(sender_id=sender.id, receiver_id=receiver.id, content=request.content)
+    db.add(dm)
+    db.commit()
+    db.refresh(dm)
+    
+    # Send real-time notification if online
+    await manager.send_to_user(receiver.username, {
+        "type": "dm",
+        "content": request.content,
+        "sender": sender.username,
+        "sender_id": sender.id
+    })
+    
+    logger.info(f"\uD83D\uDCDD DM sent from {sender.username} to {receiver.username}")
+    return {"success": True, "message_id": dm.id}
+
+# ============ END DM ENDPOINTS ============
+
 @app.delete("/api/rooms/{room_id}")
 async def delete_room(room_id: int, username: str, db: Session = Depends(get_db)):
     user = get_current_user(username, db)
@@ -304,14 +442,13 @@ async def delete_message(message_id: int, username: str, db: Session = Depends(g
     if not message:
         return JSONResponse({"success": False, "error": "Message not found"}, status_code=404)
     
-    # Allow user to delete own message or admin to delete any
     if message.user_id != user.id and not user.is_admin:
         return JSONResponse({"success": False, "error": "You can only delete your own messages"}, status_code=403)
     
     message.is_deleted = True
     message.content = "[Message deleted]"
     db.commit()
-    await manager.broadcast_to_room(message.room_id, {"type": "system", "content": f"Message was deleted"})
+    await manager.broadcast_to_room(message.room_id, {"type": "system", "content": "Message was deleted"})
     return {"success": True}
 
 @app.put("/api/messages/{message_id}")
@@ -321,7 +458,6 @@ async def edit_message(message_id: int, request: EditMessageRequest, username: s
     if not message:
         return JSONResponse({"success": False, "error": "Message not found"}, status_code=404)
     
-    # Allow user to edit own message or admin to edit any
     if message.user_id != user.id and not user.is_admin:
         return JSONResponse({"success": False, "error": "You can only edit your own messages"}, status_code=403)
     
@@ -343,7 +479,7 @@ async def get_all_users(username: str, db: Session = Depends(get_db)):
     users = db.query(User).all()
     return [{
         "id": u.id, "username": u.username, "is_admin": u.is_admin, "is_banned": u.is_banned,
-        "created_at": u.created_at.isoformat(), "is_online": u.username in manager.get_online_users()
+        "created_at": u.created_at.isoformat(), "is_online": manager.is_user_online(u.username)
     } for u in users]
 
 @app.post("/api/admin/ban/{user_id}")
@@ -392,7 +528,7 @@ async def get_online_users(username: str, db: Session = Depends(get_db)):
     return {"online": manager.get_online_users(), "count": manager.get_online_count()}
 
 @app.get("/api/admin/stats")
-async def get_stats(username: str, db: Session = Depends(get_db)):
+async def get_stats(username: str, db: Session = Dependencies(get_db)):
     user = get_current_user(username, db)
     check_admin(user)
     return {
@@ -417,7 +553,6 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("action")
 
-
             if action == "join_room":
                 room_id = data.get("room_id")
                 current_username = data.get("username")
@@ -431,7 +566,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     db.close()
                     return
                 
-                # Check private room access
                 room = db.query(Room).filter(Room.id == room_id).first()
                 if room and room.is_private and room.created_by != user.id:
                     await websocket.send_json({"type": "kicked", "content": "Access denied to private room"})
@@ -479,6 +613,78 @@ async def websocket_endpoint(websocket: WebSocket):
                     await manager.broadcast_to_room(current_room, {"type": "system", "content": f"{current_username} left the chat"})
                     manager.disconnect(websocket, current_room, current_username)
                     current_room = None
+
+            # ============ WebRTC Signaling ============
+            elif action == "call":
+                # User wants to call someone
+                target_user = data.get("target")
+                call_type = data.get("call_type", "video")  # video or audio
+                
+                if manager.is_user_online(target_user):
+                    await manager.send_to_user(target_user, {
+                        "type": "incoming_call",
+                        "from": current_username,
+                        "call_type": call_type,
+                        "call_id": f"{current_username}_{target_user}"
+                    })
+                    await websocket.send_json({
+                        "type": "call_ringing",
+                        "target": target_user
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "call_failed",
+                        "reason": "User is offline"
+                    })
+
+            elif action == "call_accept":
+                # User accepted the call
+                target_user = data.get("target")
+                await manager.send_to_user(target_user, {
+                    "type": "call_accepted",
+                    "from": current_username
+                })
+
+            elif action == "call_reject":
+                # User rejected the call
+                target_user = data.get("target")
+                await manager.send_to_user(target_user, {
+                    "type": "call_rejected",
+                    "from": current_username
+                })
+
+            elif action == "offer":
+                # WebRTC offer
+                target_user = data.get("target")
+                offer = data.get("offer")
+                await manager.send_to_user(target_user, {
+                    "type": "offer",
+                    "from": current_username,
+                    "offer": offer
+                })
+
+            elif action == "answer":
+                # WebRTC answer
+                target_user = data.get("target")
+                answer = data.get("answer")
+                await manager.send_to_user(target_user, {
+                    "type": "answer",
+                    "from": current_username,
+                    "answer": answer
+                })
+
+
+            elif action == "ice_candidate":
+                # ICE candidate exchange
+                target_user = data.get("target")
+                candidate = data.get("candidate")
+                await manager.send_to_user(target_user, {
+                    "type": "ice_candidate",
+                    "from": current_username,
+                    "candidate": candidate
+                })
+            # ============ End WebRTC ============
+
 
     except WebSocketDisconnect:
         logger.info("\uD83D\uDC4C WebSocket disconnected")
