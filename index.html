@@ -2,349 +2,1030 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"" content="width=device-width, initial-scale=1.0">
-    <title>Python Messenger Pro</title>
-    <meta name="theme-color" content="#1a1a2e">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesange Messenger</title>
+    <meta name="theme-color" content="#0f0f23">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #fff;
-            height: 100vh;
-            display: flex;
-            overflow: hidden;
+        :root {
+            --bg-primary: #0f0f23;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #16213e;
+            --accent: #00d9ff;
+            --accent-hover: #00b8d9;
+            --accent-glow: rgba(0, 217, 255, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #666680;
+            --success: #51cf66;
+            --danger: #ff6b6b;
+            --warning: #ffd43b;
+            --border: rgba(255, 255, 255, 0.08);
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-hover: rgba(255, 255, 255, 0.1);
         }
 
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            line-height: 1.5;
+        }
+
+        /* Auth Screen */
         #auth-screen {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            display: flex; justify-content: center; align-items: center; z-index: 1000;
+            position: fixed; inset: 0;
+            background: var(--bg-primary);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999;
+            background-image: 
+                radial-gradient(ellipse at 20% 80%, rgba(0, 217, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(81, 207, 102, 0.1) 0%, transparent 50%);
+        }
+
+        .auth-container {
+            width: 100%; max-width: 420px;
+            padding: 40px;
+            animation: fadeInUp 0.5s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .auth-logo {
+            text-align: center; margin-bottom: 40px;
+        }
+
+        .auth-logo h1 {
+            font-size: 42px; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--success));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .auth-logo p {
+            color: var(--text-secondary); margin-top: 8px;
         }
 
         .auth-box {
-            background: rgba(255,255,255,0.1); padding: 40px; border-radius: 15px;
-            backdrop-filter: blur(10px); width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 36px;
+            backdrop-filter: blur(20px);
         }
 
-        .auth-box h2 { text-align: center; margin-bottom: 30px; color: #00d9ff; }
-        .auth-box input {
-            width: 100%; padding: 12px; margin: 10px 0; border: none; border-radius: 8px;
-            background: rgba(255,255,255,0.2); color: #fff; font-size: 16px;
+        .auth-box h2 {
+            font-size: 24px; margin-bottom: 24px;
+            color: var(--text-primary);
         }
-        .auth-box input::placeholder { color: #aaa; }
-        .auth-box button {
-            width: 100%; padding: 12px; margin: 10px 0; border: none; border-radius: 8px;
-            background: #00d9ff; color: #1a1a2e; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s;
+
+        .input-group { margin-bottom: 20px; }
+
+        .input-group label {
+            display: block; font-size: 13px;
+            color: var(--text-secondary); margin-bottom: 8px;
+            font-weight: 500;
         }
-        .auth-box button:hover { background: #00b8d9; transform: translateY(-2px); }
-        .auth-box .toggle { text-align: center; margin-top: 20px; color: #aaa; cursor: pointer; }
-        .auth-box .toggle:hover { color: #00d9ff; }
-        .error { color: #ff6b6b; font-size: 14px; text-align: center; margin-top: 10px; }
 
-        #app-screen { display: none; width: 100%; height: 100%; }
+        .input-group input {
+            width: 100%; padding: 14px 18px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 15px;
+            transition: all 0.3s ease;
+        }
 
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+
+        .input-group input::placeholder { color: var(--text-muted); }
+
+        .btn-primary {
+            width: 100%; padding: 16px;
+            border: none; border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), #00b8d9);
+            color: var(--bg-primary);
+            font-size: 16px; font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px var(--accent-glow);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        .auth-toggle {
+            text-align: center; margin-top: 24px;
+            color: var(--text-secondary);
+        }
+
+        .auth-toggle span {
+            color: var(--accent);
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .auth-toggle span:hover { text-decoration: underline; }
+
+        .error-msg {
+            background: rgba(255, 107, 107, 0.15);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error-msg.show { display: block; animation: shake 0.4s ease; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+
+        /* Main App */
+        #app-screen {
+            display: none; width: 100%; height: 100%;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #app-screen.visible { opacity: 1; }
+
+        .app-layout {
+            display: flex; height: 100%;
+        }
+
+        /* Sidebar */
         .sidebar {
-            width: 280px; background: rgba(0,0,0,0.3);
-            border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column;
+            width: 320px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+
+        .user-card {
+            padding: 24px;
+            background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+            border-bottom: 1px solid var(--border);
         }
 
         .user-info {
-            padding: 20px; background: rgba(0,0,0,0.2);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; gap: 14px;
         }
-        .user-info h3 { color: #00d9ff; }
-        .user-info p { color: #aaa; font-size: 14px; margin-top: 5px; }
+
+        .user-avatar {
+            width: 52px; height: 52px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, var(--accent), var(--success));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; font-weight: 700;
+            color: var(--bg-primary);
+            position: relative;
+        }
+
+        .user-avatar::after {
+            content: '';
+            position: absolute; bottom: 2px; right: 2px;
+            width: 14px; height: 14px;
+            background: var(--success);
+            border: 3px solid var(--bg-secondary);
+            border-radius: 50%;
+        }
+
+        .user-details h3 {
+            font-size: 17px; font-weight: 600;
+        }
+
+        .user-details p {
+            font-size: 13px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 6px;
+        }
+
         .admin-badge {
-            display: inline-block; background: #ff6b6b; color: white;
-            padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 5px;
+            background: var(--danger);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
         }
 
-        .tabs {
-            display: flex; border-bottom: 1px solid rgba(255,255,255,0.1);
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
         }
-        .tab {
-            flex: 1; padding: 15px; text-align: center; cursor: pointer; color: #aaa; transition: 0.3s;
+
+        .nav-tab {
+            flex: 1; padding: 16px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-weight: 500;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
         }
-        .tab.active { color: #00d9ff; border-bottom: 2px solid #00d9ff; }
 
+        .nav-tab.active {
+            color: var(--accent);
+        }
 
-        .rooms-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .nav-tab.active::after {
+            content: '';
+            position: absolute; bottom: 0; left: 20%; right: 20%;
+            height: 3px;
+            background: var(--accent);
+            border-radius: 3px 3px 0 0;
+        }
+
+        .nav-tab:hover { color: var(--text-primary); }
+
+        /* Content Areas */
+        .content-area {
+            flex: 1; overflow-y: auto;
+            padding: 16px;
+        }
+
+        .content-area.hidden { display: none; }
+
+        /* Room Items */
+        .section-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+        }
+
+        .section-header h4 {
+            font-size: 12px; text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+        }
 
         .room-item {
-            padding: 15px; margin: 5px 0; background: rgba(255,255,255,0.05);
-            border-radius: 8px; cursor: pointer; transition: 0.3s;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .room-item:hover { background: rgba(255,255,255,0.1); }
-        .room-item.active { background: rgba(0,217,255,0.2); border-left: 3px solid #00d9ff; }
-        .room-item h4 { margin-bottom: 5px; }
-        .room-item p { font-size: 12px; color: #aaa; }
-        .delete-room-btn {
-            background: #ff6b6b; border: none; color: white; padding: 5px 10px;
-            border-radius: 5px; cursor: pointer; font-size: 12px; display: none;
-        }
-        .admin .delete-room-btn { display: block; }
-
-        .create-room { padding: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
-        .create-room input {
-            width: 100%; padding: 10px; border: none; border-radius: 8px;
-            background: rgba(255,255,255,0.1); color: #fff; margin-bottom: 10px;
-        }
-        .create-room button {
-            width: 100%; padding: 10px; border: none; border-radius: 8px;
-            background: #00d9ff; color: #1a1a2e; font-weight: bold; cursor: pointer;
+            display: flex; align-items: center;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            background: var(--glass);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
         }
 
+        .room-item:hover {
+            background: var(--glass-hover);
+            border-color: var(--border);
+        }
+
+        .room-item.active {
+            background: rgba(0, 217, 255, 0.12);
+            border-color: var(--accent);
+        }
+
+        .room-icon {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            display: flex; align-items: center; justify-content: center;
+            margin-right: 14px;
+            font-size: 20px;
+        }
+
+        .room-item.active .room-icon {
+            background: var(--accent);
+        }
+
+        .room-info { flex: 1; }
+
+        .room-info h4 {
+            font-size: 15px; font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .room-info p {
+            font-size: 13px; color: var(--text-secondary);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .room-meta {
+            text-align: right;
+        }
+
+        .room-meta .unread {
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px; font-weight: 600;
+        }
+
+        /* Create Room */
+        .create-room-section {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            margin-top: auto;
+        }
+
+        .create-room-section input {
+            width: 100%; padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .create-room-section input:focus {
+            outline: none; border-color: var(--accent);
+        }
+
+        .create-room-section button {
+            width: 100%; padding: 12px;
+            border: none; border-radius: 10px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .create-room-section button:hover {
+            background: var(--accent-hover);
+        }
+
+        /* Chat Area */
         .chat-area {
             flex: 1; display: flex; flex-direction: column;
+            background: var(--bg-primary);
         }
 
         .chat-header {
-            padding: 20px; background: rgba(0,0,0,0.2);
-            border-bottom: 1px solid rgba(255,255,255,0.1); display: flex;
-            justify-content: space-between; align-items: center;
+            padding: 20px 28px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
         }
-        .chat-header h2 { color: #00d9ff; }
-        .online-count { color: #51cf66; font-size: 14px; }
-        #admin-toggle {
-            padding: 10px 20px; background: #ff6b6b; border: none; border-radius: 8px;
-            color: white; font-weight: bold; cursor: pointer;
-        }
-        .admin #admin-toggle { display: block; }
 
-        #messages { flex: 1; padding: 20px; overflow-y: auto; }
-        .message { margin-bottom: 15px; max-width: 70%; position: relative; }
-        .message.own { margin-left: auto; text-align: right; }
-        .message-bubble {
-            display: inline-block; padding: 12px 18px; border-radius: 18px;
-            background: rgba(255,255,255,0.1);
+        .chat-header-info h2 {
+            font-size: 20px; font-weight: 600;
+            display: flex; align-items: center; gap: 10px;
         }
-        .message.own .message-bubble { background: #00d9ff; color: #1a1a2e; }
-        .message-username { font-size: 12px; color: #00d9ff; margin-bottom: 5px; }
-        .message.own .message-username { color: #00b8d9; }
-        .message-time { font-size: 11px; color: #666; margin-top: 5px; }
-        .delete-msg-btn {
-            position: absolute; top: -5px; right: -5px; background: #ff6b6b;
-            border: none; color: white; width: 20px; height: 20px;
-            border-radius: 50%; cursor: pointer; font-size: 12px; display: none;
+
+        .chat-header-info h2 .room-icon {
+            width: 32px; height: 32px;
+            font-size: 16px;
+            margin: 0;
         }
-        .admin .delete-msg-btn { display: block; }
+
+        .chat-header-actions {
+            display: flex; gap: 12px;
+        }
+
+        .icon-btn {
+            width: 42px; height: 42px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--glass);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .icon-btn:hover {
+            background: var(--glass-hover);
+            color: var(--text-primary);
+        }
+
+        /* Messages */
+        #messages {
+            flex: 1; padding: 24px;
+            overflow-y: auto;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+
+        .message {
+            display: flex; gap: 12px;
+            max-width: 75%;
+            animation: messageIn 0.3s ease;
+        }
+
+        @keyframes messageIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.own {
+            flex-direction: row-reverse;
+            margin-left: auto;
+        }
+
+        .message-avatar {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--success));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 600;
+            color: var(--bg-primary);
+            flex-shrink: 0;
+        }
+
+        .message.own .message-avatar { display: none; }
+
+        .message-content {
+            background: var(--glass);
+            padding: 14px 18px;
+            border-radius: 18px;
+            border-top-left-radius: 4px;
+        }
+
+        .message.own .message-content {
+            background: var(--accent);
+            color: var(--bg-primary);
+            border-top-left-radius: 18px;
+            border-top-right-radius: 4px;
+        }
+
+        .message-sender {
+            font-size: 13px; font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .message.own .message-sender { display: none; }
+
+        .message-text {
+            font-size: 15px; line-height: 1.5;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .message.own .message-time {
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        .message-edited {
+            font-size: 11px;
+            font-style: italic;
+            color: var(--text-muted);
+        }
+
         .system-message {
-            text-align: center; color: #666; font-style: italic; font-size: 13px; margin: 10px 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+            padding: 12px;
         }
 
-        #typing-indicator { padding: 20px; color: #666; font-size: 14px; display: none; }
-
+        /* Input Area */
         .input-area {
-            padding: 20px; background: rgba(0,0,0,0.2); display: flex; gap: 10px;
+            padding: 20px 28px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            display: flex; gap: 14px;
+            align-items: center;
         }
+
         .input-area input {
-            flex: 1; padding: 15px; border: none; border-radius: 25px;
-            background: rgba(255,255,255,0.1); color: #fff; font-size: 16px;
+            flex: 1; padding: 16px 20px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 15px;
         }
+
+        .input-area input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
         .input-area button {
-            padding: 15px 30px; border: none; border-radius: 25px;
-            background: #00d9ff; color: #1a1a2e; font-weight: bold; cursor: pointer;
-            transition: 0.3s;
+            width: 52px; height: 52px;
+            border-radius: 16px;
+            border: none;
+            background: var(--accent);
+            color: var(--bg-primary);
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .input-area button:hover { background: #00b8d9; }
 
+        .input-area button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        /* Emoji Picker */
         .emojipicker {
-            position: absolute; bottom: 80px; right: 30px; background: rgba(0,0,0,0.9);
-            border-radius: 10px; padding: 10px; display: none; z-index: 100;
+            position: absolute;
+            bottom: 100px; right: 28px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            display: none;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            z-index: 100;
         }
-        .emojipicker.show { display: block; }
-        .emojipicker span {
-            font-size: 24px; cursor: pointer; padding: 5px; transition: 0.3s;
-        }
-        .emojipicker span:hover { transform: scale(1.3); }
 
+        .emojipicker.show { display: grid; }
+
+        .emojipicker span {
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .emojipicker span:hover {
+            background: var(--glass);
+            transform: scale(1.2);
+        }
+
+        /* Admin Panel */
         #admin-panel {
-            display: none; position: fixed; top: 0; right: 0; width: 400px; height: 100%;
-            background: rgba(26, 26, 46, 0.98); border-left: 1px solid rgba(255,255,255,0.1); z-index: 500;
+            display: none;
+            position: fixed; top: 0; right: 0;
+            width: 420px; height: 100%;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            z-index: 500;
             overflow-y: auto;
         }
-        .admin-panel-header {
-            padding: 20px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;
-        }
-        .admin-panel-header h2 { color: #ff6b6b; }
-        .close-admin { background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; }
-        .admin-section { padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .admin-section h3 { color: #00d9ff; margin-bottom: 15px; }
-        .user-list-item {
+
+        #admin-panel.show { display: block; }
+
+        .admin-header {
+            padding: 24px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
             display: flex; justify-content: space-between; align-items: center;
-            padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 10px;
-        }
-        .user-list-item .user-info-section { background: none; padding: 0; border: none; }
-        .user-list-item h3 { font-size: 14px; margin: 0; }
-        .user-list-item p { font-size: 11px; margin: 3px 0 0 0; }
-        .user-actions { display: flex; gap: 5px; }
-        .btn-ban { background: #ff6b6b; color: white; }
-        .btn-unban { background: #51cf66; color: white; }
-        .btn-admin { background: #ffd43b; color: #1a1a2e; }
-        .online-indicator {
-            width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px;
-        }
-        .online-indicator.online { background: #51cf66; }
-        .online-indicator.offline { background: #666; }
-
-        .notification {
-            position: fixed; top: 20px; right: 20px; background: #00d9ff;
-            color: #1a1a2e; padding: 15px 25px; border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 2000;
-            animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
         }
 
-        /* DM Styles */
-        .dm-section { padding: 10px; }
-        .dm-item {
-            display: flex; align-items: center; padding: 12px;
-            background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px;
-            cursor: pointer; transition: 0.3s;
+        .admin-header h2 {
+            font-size: 20px;
+            color: var(--danger);
         }
-        .dm-item:hover { background: rgba(255,255,255,0.1); }
-        .dm-item .avatar {
-            width: 40px; height: 40px; border-radius: 50%; background: #00d9ff;
-            display: flex; align-items: center; justify-content: center; margin-right: 12px;
-            font-weight: bold; color: #1a1a2e;
-        }
-        .dm-item .dm-info { flex: 1; }
-        .dm-item .dm-info h4 { font-size: 14px; margin-bottom: 3px; }
-        .dm-item .dm-info p { font-size: 12px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
-        .dm-item .unread-badge {
-            background: #ff6b6b; color: white; padding: 2px 8px;
-            border-radius: 10px; font-size: 11px; display: none;
-        }
-        .dm-item .unread-badge.show { display: block; }
 
+        .admin-section {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .admin-section h3 {
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+
+        .admin-user-item {
+            display: flex; align-items: center;
+            padding: 14px;
+            background: var(--glass);
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+
+        .admin-user-item .avatar {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            background: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            margin-right: 12px;
+            font-weight: 600; color: var(--bg-primary);
+        }
+
+        .admin-user-item .info { flex: 1; }
+
+        .admin-user-item .info h4 {
+            font-size: 14px; font-weight: 500;
+        }
+
+        .admin-user-item .info p {
+            font-size: 12px; color: var(--text-secondary);
+        }
+
+        .admin-actions {
+            display: flex; gap: 8px;
+        }
+
+        .admin-actions button {
+            padding: 8px 12px;
+            border: none; border-radius: 8px;
+            font-size: 12px; font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-warning { background: var(--warning); color: var(--bg-primary); }
 
         /* Call Modal */
         .call-modal {
-            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.9); z-index: 3000;
-            justify-content: center; align-items: center; flex-direction: column;
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 3000;
+            justify-content: center; align-items: center;
+            flex-direction: column;
         }
+
         .call-modal.show { display: flex; }
-        .call-modal h2 { font-size: 24px; margin-bottom: 20px; }
-        .call-modal .call-buttons { display: flex; gap: 20px; }
-        .call-modal button {
-            padding: 15px 40px; border: none; border-radius: 50px;
-            font-size: 18px; cursor: pointer; transition: 0.3s;
+
+        .call-modal h2 {
+            font-size: 28px; margin-bottom: 16px;
         }
-        .call-modal .accept { background: #51cf66; color: white; }
-        .call-modal .reject { background: #ff6b6b; color: white; }
-        .call-modal .end-call { background: #ff6b6b; color: white; display: none; }
+
+        .call-modal p {
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .call-buttons {
+            display: flex; gap: 24px;
+        }
+
+        .call-buttons button {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .call-buttons .accept {
+            background: var(--success);
+            color: white;
+        }
+
+        .call-buttons .reject {
+            background: var(--danger);
+            color: white;
+        }
 
         /* Video Call UI */
         .video-call-ui {
-            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: #000; z-index: 2500;
+            display: none;
+            position: fixed; inset: 0;
+            background: #000;
+            z-index: 2500;
         }
+
         .video-call-ui.show { display: block; }
+
         .video-call-ui video {
-            width: 100%; height: 100%; object-fit: cover;
+            width: 100%; height: 100%;
+            object-fit: cover;
         }
+
         .video-call-ui .local-video {
-            position: absolute; bottom: 20px; right: 20px; width: 200px; height: 150px;
-            border-radius: 10px; overflow: hidden; border: 2px solid #00d9ff;
+            position: absolute;
+            bottom: 30px; right: 30px;
+            width: 180px; height: 135px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 3px solid var(--accent);
         }
-        .video-call-ui .call-controls {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+
+        .call-controls {
+            position: absolute;
+            bottom: 40px; left: 50%;
+            transform: translateX(-50%);
             display: flex; gap: 20px;
         }
-        .video-call-ui .call-controls button {
-            width: 60px; height: 60px; border-radius: 50%; border: none;
-            font-size: 24px; cursor: pointer; transition: 0.3s;
-        }
-        .video-call-ui .mute-btn { background: #666; color: white; }
-        .video-call-ui .mute-btn.muted { background: #ff6b6b; }
-        .video-call-ui .end-btn { background: #ff6b6b; color: white; }
 
-        /* DM Chat View */
-        .dm-chat-view {
-            display: none; flex: 1; flex-direction: column;
+        .call-controls button {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .dm-chat-view.active { display: flex; }
-        .back-to-rooms {
-            padding: 10px; background: rgba(0,0,0,0.2); cursor: pointer; color: #00d9ff;
+
+        .call-controls .mute-btn {
+            background: var(--glass);
+            color: white;
+        }
+
+        .call-controls .mute-btn.muted {
+            background: var(--danger);
+        }
+
+        .call-controls .end-btn {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Notifications */
+        .notification {
+            position: fixed;
+            top: 24px; right: 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            padding: 16px 24px;
+            border-radius: 14px;
+            z-index: 2000;
+            animation: slideInRight 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(100px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .notification.success { border-left: 4px solid var(--success); }
+        .notification.error { border-left: 4px solid var(--danger); }
+
+        /* Game Overlay Styles */
+        .game-overlay {
+            position: fixed;
+            bottom: 20px; left: 20px;
+            background: rgba(15, 15, 35, 0.95);
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            padding: 16px 20px;
+            z-index: 10000;
+            display: none;
+            min-width: 280px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .game-overlay.show { display: block; }
+
+        .game-overlay-header {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .game-overlay-header .game-icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+        }
+
+        .game-overlay-header h4 {
+            font-size: 15px; font-weight: 600;
+        }
+
+        .game-overlay-header p {
+            font-size: 12px; color: var(--text-secondary);
+        }
+
+        .game-overlay-status {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px;
+            background: var(--glass);
+            border-radius: 10px;
+        }
+
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .game-overlay-status span {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .online-users-list {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .online-users-list h5 {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .online-user-item {
+            display: flex; align-items: center;
+            gap: 8px; padding: 6px 0;
+            font-size: 13px;
+        }
+
+        .online-user-item .status-dot {
+            width: 6px; height: 6px;
+        }
+
+        /* DM Section */
+        .dm-item {
+            display: flex; align-items: center;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            background: var(--glass);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dm-item:hover {
+            background: var(--glass-hover);
+        }
+
+        .dm-item .avatar {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--success));
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 600; color: var(--bg-primary);
+            margin-right: 14px;
+        }
+
+        .dm-item .dm-info { flex: 1; }
+
+        .dm-item .dm-info h4 {
+            font-size: 15px; font-weight: 500;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .dm-item .dm-info p {
+            font-size: 13px; color: var(--text-secondary);
+            white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        .dm-item .unread-badge {
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px; font-weight: 600;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { width: 100%; position: fixed; left: 0; top: 0; bottom: 0; z-index: 100; transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .chat-area { width: 100%; }
         }
     </style>
 </head>
 <body>
+<!-- Auth Screen -->
 <div id="auth-screen">
-    <div class="auth-box">
-        <h2 id="auth-title">Вход</h2>
-        <input type="text" id="auth-username" placeholder="Логин">
-        <input type="password" id="auth-password" placeholder="Пароль">
-        <div id="auth-error" class="error"></div>
-        <button id="auth-btn" onclick="handleAuth()">Войти</button>
-        <div class="toggle" onclick="toggleAuth()">Нет аккаунта? Регистрация</div>
+    <div class="auth-container">
+        <div class="auth-logo">
+            <h1>Mesange</h1>
+            <p>Мессенджер нового поколения</p>
+        </div>
+        <div class="auth-box">
+            <h2 id="auth-title">Вход</h2>
+            <div id="auth-error" class="error-msg"></div>
+            <div class="input-group">
+                <label>Логин</label>
+                <input type="text" id="auth-username" placeholder="Ваш никнейм">
+            </div>
+            <div class="input-group">
+                <label>Пароль</label>
+                <input type="password" id="auth-password" placeholder="Ваш пароль">
+            </div>
+            <button class="btn-primary" id="auth-btn" onclick="handleAuth()">Войти</button>
+            <div class="auth-toggle">
+                <span onclick="toggleAuth()" id="auth-toggle-text">Нет аккаунта? Регистрация</span>
+            </div>
+        </div>
     </div>
 </div>
 
+<!-- Main App -->
 <div id="app-screen">
-    <div class="sidebar">
-        <div class="user-info">
-            <h3 id="current-user">User</h3>
-            <p>ID: <span id="user-id"></span> <span id="admin-badge" class="admin-badge" style="display:none;">ADMIN</span></p>
-        </div>
-        
-        <div class="tabs">
-            <div class="tab active" onclick="switchTab('rooms')">Чаты</div>
-            <div class="tab" onclick="switchTab('dm')">ЛС</div>
-        </div>
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="user-card">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">U</div>
+                    <div class="user-details">
+                        <h3 id="current-user">User</h3>
+                        <p>ID: <span id="user-id">0</span> <span id="admin-badge" class="admin-badge" style="display:none;">ADMIN</span></p>
+                    </div>
+                </div>
+            </div>
 
-        <div id="rooms-tab">
-            <div class="rooms-list" id="rooms-list"></div>
-            <div class="create-room">
+            <div class="nav-tabs">
+                <div class="nav-tab active" onclick="switchTab('rooms')">Чаты</div>
+                <div class="nav-tab" onclick="switchTab('dm')">ЛС</div>
+            </div>
+
+            <div id="rooms-tab" class="content-area">
+                <div class="section-header">
+                    <h4>Комнаты</h4>
+                </div>
+                <div id="rooms-list"></div>
+            </div>
+
+            <div id="dm-tab" class="content-area hidden">
+                <div class="section-header">
+                    <h4>Личные сообщения</h4>
+                </div>
+                <div id="dm-list"></div>
+            </div>
+
+            <div class="create-room-section">
                 <input type="text" id="new-room-name" placeholder="Название комнаты">
-                <input type="text" id="new-room-desc" placeholder="Описание">
-                <button onclick="createRoom()">Создать комнату</button>
+                <input type="text" id="new-room-desc" placeholder="Описание (опционально)">
+                <button onclick="createRoom()">+ Создать комнату</button>
             </div>
         </div>
 
-        <div id="dm-tab" style="display:none;">
-            <div class="dm-section" id="dm-list"></div>
-        </div>
-    </div>
-
-    <div class="chat-area">
-        <div class="chat-header">
-            <h2 id="current-room">#general</h2>
-            <div style="display:flex;gap:10px;align-items:center;">
-                <span class="online-count" id="online-count">👤 0</span>
-                <button id="admin-toggle" onclick="toggleAdminPanel()">⚙️ Админ</button>
+        <!-- Chat Area -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <h2 id="current-room">
+                        <span class="room-icon">💬</span>
+                        <span id="room-name">general</span>
+                    </h2>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="icon-btn" onclick="toggleSidebar()" title="Меню">☰</button>
+                    <button class="icon-btn" onclick="toggleAdminPanel()" title="Админ-панель">⚙️</button>
+                </div>
             </div>
-        </div>
-        <div id="messages"></div>
-        <div id="typing-indicator"><span id="typing-user"></span> печатает...</div>
-        <div class="input-area">
-            <input type="text" id="message-input" placeholder="Введите сообщение..." onkeypress="handleEnter(event)">
-            <button onclick="toggleEmojiPicker()">😊</button>
-            <button onclick="sendMessage()">Отправить</button>
-        </div>
-        <div class="emojipicker" id="emojipicker">
-            <span onclick="addEmoji('😀')">😀</span>
-            <span onclick="addEmoji('😂')">😂</span>
-            <span onclick="addEmoji('😍')">😍</span>
-            <span onclick="addEmoji('👍')">👍</span>
-            <span onclick="addEmoji('🎮')">🎮</span>
-            <span onclick="addEmoji('🔥')">🔥</span>
-            <span onclick="addEmoji('❤️')">❤️</span>
-            <span onclick="addEmoji('😎')">😎</span>
+
+            <div id="messages"></div>
+
+            <div class="input-area">
+                <input type="text" id="message-input" placeholder="Введите сообщение..." onkeypress="handleEnter(event)">
+                <button onclick="toggleEmojiPicker()">😊</button>
+                <button onclick="sendMessage()">➤</button>
+            </div>
+
+            <div class="emojipicker" id="emojipicker">
+                <span onclick="addEmoji('😀')">😀</span>
+                <span onclick="addEmoji('😂')">😂</span>
+                <span onclick="addEmoji('😍')">😍</span>
+                <span onclick="addEmoji('👍')">👍</span>
+                <span onclick="addEmoji('🎮')">🎮</span>
+                <span onclick="addEmoji('🔥')">🔥</span>
+                <span onclick="addEmoji('❤️')">❤️</span>
+                <span onclick="addEmoji('😎')">😎</span>
+                <span onclick="addEmoji('🤔')">🤔</span>
+                <span onclick="addEmoji('😴')">😴</span>
+                <span onclick="addEmoji('🎉')">🎉</span>
+                <span onclick="addEmoji('💯')">💯</span>
+            </div>
         </div>
     </div>
 </div>
 
+<!-- Admin Panel -->
 <div id="admin-panel">
-    <div class="admin-panel-header">
+    <div class="admin-header">
         <h2>⚙️ Админ-панель</h2>
-        <button class="close-admin" onclick="toggleAdminPanel()">✕</button>
+        <button class="icon-btn" onclick="toggleAdminPanel()">✕</button>
     </div>
     <div class="admin-section">
         <h3>👥 Пользователи</h3>
@@ -352,20 +1033,20 @@
     </div>
     <div class="admin-section">
         <h3>📊 Статистика</h3>
-        <p>Всего пользователей: <span id="total-users">0</span></p>
-        <p>Всего комнат: <span id="total-rooms">0</span></p>
-        <p>Всего сообщений: <span id="total-messages">0</span></p>
+        <p>Пользователей: <span id="total-users">0</span></p>
+        <p>Комнат: <span id="total-rooms">0</span></p>
+        <p>Сообщений: <span id="total-messages">0</span></p>
         <p>Онлайн: <span id="online-users">0</span></p>
-        <p>Заблокировано: <span id="banned-users">0</span></p>
     </div>
 </div>
 
-<!-- Incoming Call Modal -->
+<!-- Call Modal -->
 <div class="call-modal" id="call-modal">
-    <h2 id="call-text">Входящий звонок</h2>
+    <h2>📞 Входящий звонок</h2>
+    <p id="call-from">От: User</p>
     <div class="call-buttons">
-        <button class="accept" onclick="acceptCall()">✅ Принять</button>
-        <button class="reject" onclick="rejectCall()">❌ Отклонить</button>
+        <button class="accept" onclick="acceptCall()">✅</button>
+        <button class="reject" onclick="rejectCall()">❌</button>
     </div>
 </div>
 
@@ -377,7 +1058,26 @@
     </div>
     <div class="call-controls">
         <button class="mute-btn" onclick="toggleMute()">🎤</button>
-        <button class="end-btn" onclick="endCall()">📴 Завершить</button>
+        <button class="end-btn" onclick="endCall()">📴</button>
+    </div>
+</div>
+
+<!-- Game Overlay -->
+<div class="game-overlay" id="game-overlay">
+    <div class="game-overlay-header">
+        <div class="game-icon" id="game-icon">🎮</div>
+        <div>
+            <h4 id="game-name">Игра не определена</h4>
+            <p id="game-status">Ожидание...</p>
+        </div>
+    </div>
+    <div class="game-overlay-status">
+        <div class="status-dot"></div>
+        <span>Онлайн в Mesange</span>
+    </div>
+    <div class="online-users-list">
+        <h5>Сейчас онлайн</h5>
+        <div id="overlay-online-users"></div>
     </div>
 </div>
 
@@ -388,18 +1088,27 @@
     let isAdmin = false;
     let ws = null;
     let isRegister = false;
-    let typingTimeout = null;
-    let currentDMUser = null;
+    let currentCallTarget = null;
     let peerConnection = null;
     let localStream = null;
-    let currentCallTarget = null;
     let isMuted = false;
+    let onlineUsers = [];
 
-    function showNotification(message, type = 'info') {
+    // Game detection config
+    const gameProcesses = {
+        'Dota 2': { icon: '🎮', color: '#e44c2c' },
+        'Fortnite': { icon: '🏝️', color: '#9c4dbc' },
+        'War Thunder': { icon: '✈️', color: '#f5a623' },
+        'CS2': { icon: '🔫', color: '#de9b35' },
+        'GTA V': { icon: '🚗', color: '#6cd300' },
+        'Minecraft': { icon: '⛏️', color: '#62b47a' },
+        'League of Legends': { icon: '⚔️', color: '#c89b3c' }
+    };
+
+    function showNotification(message, type = 'success') {
         const notif = document.createElement('div');
-        notif.className = 'notification';
+        notif.className = `notification ${type}`;
         notif.textContent = message;
-        notif.style.background = type === 'error' ? '#ff6b6b' : '#00d9ff';
         document.body.appendChild(notif);
         setTimeout(() => notif.remove(), 3000);
     }
@@ -408,8 +1117,8 @@
         isRegister = !isRegister;
         document.getElementById('auth-title').textContent = isRegister ? 'Регистрация' : 'Вход';
         document.getElementById('auth-btn').textContent = isRegister ? 'Зарегистрироваться' : 'Войти';
-        document.querySelector('.toggle').textContent = isRegister ? 'Есть аккаунт? Вход' : 'Нет аккаунта? Регистрация';
-        document.getElementById('auth-error').textContent = '';
+        document.getElementById('auth-toggle-text').textContent = isRegister ? 'Есть аккаунт? Вход' : 'Нет аккаунта? Регистрация';
+        document.getElementById('auth-error').classList.remove('show');
     }
 
     async function handleAuth() {
@@ -419,17 +1128,16 @@
 
         if (!username || !password) {
             errorDiv.textContent = 'Заполните все поля';
+            errorDiv.classList.add('show');
             return;
         }
 
-        const endpoint = isRegister ? '/api/register' : '/api/login';
-
         try {
-            const formData = new FormData();
-            formData.append('username', username);
-            formData.append('password', password);
-
-            const response = await fetch(endpoint, { method: 'POST', body: formData });
+            const endpoint = isRegister ? '/api/register' : '/api/login';
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                body: new URLSearchParams({ username, password })
+            });
             const data = await response.json();
 
             if (data.success) {
@@ -439,8 +1147,12 @@
 
                 document.getElementById('auth-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'flex';
+                setTimeout(() => document.getElementById('app-screen').classList.add('visible'), 50);
+
                 document.getElementById('current-user').textContent = currentUser;
                 document.getElementById('user-id').textContent = currentUserId;
+                document.getElementById('user-avatar').textContent = currentUser[0].toUpperCase();
+
                 if (isAdmin) {
                     document.getElementById('admin-badge').style.display = 'inline-block';
                     document.body.classList.add('admin');
@@ -450,12 +1162,14 @@
                 loadRooms();
                 loadDMConversations();
                 connectWebSocket();
+                startGameDetection();
             } else {
                 errorDiv.textContent = data.error || 'Ошибка авторизации';
+                errorDiv.classList.add('show');
             }
         } catch (e) {
             errorDiv.textContent = 'Ошибка соединения с сервером';
-            console.error(e);
+            errorDiv.classList.add('show');
         }
     }
 
@@ -471,22 +1185,18 @@
                 const div = document.createElement('div');
                 div.className = 'room-item';
                 div.innerHTML = `
-                    <div>
-                        <h4>${room.is_private ? '🔒' : '#'}${room.name}</h4>
+                    <div class="room-icon">${room.is_private ? '🔒' : '💬'}</div>
+                    <div class="room-info">
+                        <h4>${room.name}</h4>
                         <p>${room.description || 'Нет описания'}</p>
                     </div>
-                    <button class="delete-room-btn" onclick="deleteRoom(${room.id}, '${room.name}')">✕</button>
                 `;
-                div.onclick = (e) => {
-                    if (!e.target.classList.contains('delete-room-btn')) {
-                        joinRoom(room.id, room.name);
-                    }
-                };
+                div.onclick = () => joinRoom(room.id, room.name, room.is_private);
                 roomsList.appendChild(div);
             });
 
             if (rooms.length > 0 && !currentRoom) {
-                joinRoom(rooms[0].id, rooms[0].name);
+                joinRoom(rooms[0].id, rooms[0].name, rooms[0].is_private);
             }
         } catch (e) {
             console.error('Ошибка загрузки комнат:', e);
@@ -502,7 +1212,7 @@
             dmList.innerHTML = '';
 
             if (conversations.length === 0) {
-                dmList.innerHTML = '<p style="color:#aaa;text-align:center;padding:20px;">Нет диалогов</p>';
+                dmList.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">Нет диалогов</p>';
                 return;
             }
 
@@ -512,10 +1222,10 @@
                 div.innerHTML = `
                     <div class="avatar">${conv.username[0].toUpperCase()}</div>
                     <div class="dm-info">
-                        <h4>${conv.username} ${conv.is_online ? '🟢' : '⚪'}</h4>
+                        <h4>${conv.username} ${conv.is_online ? '<span style="color:var(--success);">●</span>' : ''}</h4>
                         <p>${conv.last_message || 'Нет сообщений'}</p>
                     </div>
-                    <span class="unread-badge ${conv.unread_count > 0 ? 'show' : ''}">${conv.unread_count}</span>
+                    ${conv.unread_count > 0 ? `<span class="unread-badge">${conv.unread_count}</span>` : ''}
                 `;
                 div.onclick = () => openDMPage(conv.user_id, conv.username);
                 dmList.appendChild(div);
@@ -526,47 +1236,26 @@
     }
 
     function switchTab(tab) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         event.target.classList.add('active');
-        
+
         if (tab === 'rooms') {
-            document.getElementById('rooms-tab').style.display = 'block';
-            document.getElementById('dm-tab').style.display = 'none';
+            document.getElementById('rooms-tab').classList.remove('hidden');
+            document.getElementById('dm-tab').classList.add('hidden');
         } else {
-            document.getElementById('rooms-tab').style.display = 'none';
-            document.getElementById('dm-tab').style.display = 'block';
+            document.getElementById('rooms-tab').classList.add('hidden');
+            document.getElementById('dm-tab').classList.remove('hidden');
             loadDMConversations();
         }
     }
 
-    async function openDMPage(userId, username) {
-        currentDMUser = { id: userId, username: username };
-        document.getElementById('current-room').textContent = `ЛС: ${username}`;
-        await loadDMMessages(userId);
-    }
-
-    async function loadDMMessages(userId) {
-        try {
-            const response = await fetch(`/api/dm/${userId}?username=${currentUser}`);
-            const messages = await response.json();
-
-            const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML = '';
-
-            messages.forEach(msg => {
-                appendMessage(msg.content, msg.is_mine ? currentUser : currentDMUser.username, msg.created_at, msg.is_mine, msg.id, msg.sender_id);
-            });
-
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        } catch (e) {
-            console.error('Ошибка загрузки сообщений:', e);
-        }
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('show');
     }
 
     async function createRoom() {
         const name = document.getElementById('new-room-name').value.trim();
         const desc = document.getElementById('new-room-desc').value.trim();
-
 
         if (!name) {
             showNotification('Введите название комнаты', 'error');
@@ -574,12 +1263,10 @@
         }
 
         try {
-            const formData = new FormData();
-            formData.append('name', name);
-            formData.append('description', desc);
-            formData.append('username', currentUser);
-
-            const response = await fetch('/api/rooms', { method: 'POST', body: formData });
+            const response = await fetch('/api/rooms', {
+                method: 'POST',
+                body: new URLSearchParams({ name, description: desc, username: currentUser })
+            });
             const data = await response.json();
 
             if (data.success) {
@@ -595,26 +1282,12 @@
         }
     }
 
-    async function deleteRoom(roomId, roomName) {
-        if (!confirm(`Удалить комнату ${roomName}?`)) return;
-        try {
-            const response = await fetch(`/api/rooms/${roomId}?username=${currentUser}`, { method: 'DELETE' });
-            const data = await response.json();
-            if (data.success) {
-                loadRooms();
-                showNotification('Комната удалена');
-            }
-        } catch (e) {
-            showNotification('Ошибка удаления', 'error');
-        }
-    }
-
-    function joinRoom(roomId, roomName) {
+    function joinRoom(roomId, roomName, isPrivate) {
         if (currentRoom) {
             ws.send(JSON.stringify({ action: 'leave_room' }));
         }
         currentRoom = roomId;
-        document.getElementById('current-room').textContent = '#' + roomName;
+        document.getElementById('room-name').textContent = roomName;
         document.querySelectorAll('.room-item').forEach(item => {
             item.classList.remove('active');
             if (item.textContent.includes(roomName)) {
@@ -628,6 +1301,7 @@
             username: currentUser,
             user_id: currentUserId
         }));
+        document.getElementById('sidebar').classList.remove('show');
     }
 
     async function loadMessages(roomId) {
@@ -652,13 +1326,14 @@
         const messagesDiv = document.getElementById('messages');
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${isOwn ? 'own' : ''}`;
-        const date = new Date(time).toLocaleString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+        const date = new Date(time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
         msgDiv.innerHTML = `
-            <button class="delete-msg-btn" onclick="deleteMessage(${msgId})">✕</button>
-            <div class="message-bubble">
-                ${!isOwn ? `<div class="message-username">${username}</div>` : ''}
-                ${content}
-                ${isEdited ? '<span class="message-edited">(ред.)</span>' : ''}
+            <div class="message-avatar">${username[0].toUpperCase()}</div>
+            <div class="message-content">
+                ${!isOwn ? `<div class="message-sender">${username}</div>` : ''}
+                <div class="message-text">${content}</div>
+                ${isEdited ? '<div class="message-edited">(ред.)</div>' : ''}
                 <div class="message-time">${date}</div>
             </div>
         `;
@@ -677,15 +1352,6 @@
 
     function handleEnter(e) {
         if (e.key === 'Enter') sendMessage();
-    }
-
-    async function deleteMessage(msgId) {
-        if (!confirm('Удалить сообщение?')) return;
-        try {
-            await fetch(`/api/messages/${msgId}?username=${currentUser}`, { method: 'DELETE' });
-        } catch (e) {
-            showNotification('Ошибка удаления', 'error');
-        }
     }
 
     function connectWebSocket() {
@@ -707,7 +1373,7 @@
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            
+
             if (data.type === 'kicked') {
                 alert(data.content);
                 location.reload();
@@ -722,8 +1388,6 @@
                 sysDiv.className = 'system-message';
                 sysDiv.textContent = data.content;
                 messagesDiv.appendChild(sysDiv);
-            } else if (data.type === 'typing') {
-                showTypingIndicator(data.username);
             } else if (data.type === 'dm') {
                 showNotification(`Новое ЛС от ${data.sender}: ${data.content}`);
                 loadDMConversations();
@@ -748,16 +1412,6 @@
         };
     }
 
-    function showTypingIndicator(username) {
-        const indicator = document.getElementById('typing-indicator');
-        document.getElementById('typing-user').textContent = username;
-        indicator.style.display = 'block';
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-            indicator.style.display = 'none';
-        }, 3000);
-    }
-
     function toggleEmojiPicker() {
         document.getElementById('emojipicker').classList.toggle('show');
     }
@@ -768,9 +1422,10 @@
     }
 
     function toggleAdminPanel() {
-        const panel = document.getElementById('admin-panel');
-        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-        if (panel.style.display === 'block') loadAdminData();
+        document.getElementById('admin-panel').classList.toggle('show');
+        if (document.getElementById('admin-panel').classList.contains('show')) {
+            loadAdminData();
+        }
     }
 
     async function loadAdminData() {
@@ -781,19 +1436,24 @@
             const usersList = document.getElementById('users-list');
             usersList.innerHTML = '';
 
+            onlineUsers = [];
+
             users.forEach(user => {
+                if (user.is_online) onlineUsers.push(user.username);
+
                 const div = document.createElement('div');
-                div.className = 'user-list-item';
+                div.className = 'admin-user-item';
                 div.innerHTML = `
-                    <div class="user-info-section">
-                        <h3><span class="online-indicator ${user.is_online ? 'online' : 'offline'}"></span>${user.username} ${user.is_admin ? '<span class="admin-badge">ADMIN</span>' : ''} ${user.is_banned ? '<span class="admin-badge" style="background:#ff6b6b;">BAN</span>' : ''}</h3>
-                        <p>ID: ${user.id} | ${new Date(user.created_at).toLocaleDateString()}</p>
+                    <div class="avatar">${user.username[0].toUpperCase()}</div>
+                    <div class="info">
+                        <h4>${user.username} ${user.is_admin ? '<span class="admin-badge">ADMIN</span>' : ''} ${user.is_banned ? '<span class="admin-badge" style="background:var(--danger);">BAN</span>' : ''}</h4>
+                        <p>ID: ${user.id} | ${user.is_online ? '🟢 Онлайн' : '⚪ Оффлайн'}</p>
                     </div>
-                    <div class="user-actions">
-                        ${!user.is_banned && !user.is_admin ? `<button class="btn-ban" onclick="banUser(${user.id})">Ban</button>` : ''}
-                        ${user.is_banned ? `<button class="btn-unban" onclick="unbanUser(${user.id})">Unban</button>` : ''}
-                        ${!user.is_admin ? `<button class="btn-admin" onclick="makeAdmin(${user.id})">Admin</button>` : ''}
-                        <button class="btn-call" onclick="callUser('${user.username}', 'video')">📹</button>
+                    <div class="admin-actions">
+                        ${!user.is_banned && !user.is_admin ? `<button class="btn-danger" onclick="banUser(${user.id})">Ban</button>` : ''}
+                        ${user.is_banned ? `<button class="btn-success" onclick="unbanUser(${user.id})">Unban</button>` : ''}
+                        ${!user.is_admin ? `<button class="btn-warning" onclick="makeAdmin(${user.id})">Admin</button>` : ''}
+                        <button class="btn-success" onclick="callUser('${user.username}', 'video')">📹</button>
                     </div>
                 `;
                 usersList.appendChild(div);
@@ -806,9 +1466,8 @@
             document.getElementById('total-rooms').textContent = stats.total_rooms;
             document.getElementById('total-messages').textContent = stats.total_messages;
             document.getElementById('online-users').textContent = stats.online_users;
-            document.getElementById('banned-users').textContent = stats.banned_users;
 
-            document.getElementById('online-count').textContent = `👤 ${stats.online_users}`;
+            updateGameOverlay();
         } catch (e) {
             console.error('Ошибка загрузки админ-данных:', e);
         }
@@ -847,38 +1506,27 @@
     }
 
     // ============ WebRTC Call Functions ============
-    
     function callUser(target, callType) {
         currentCallTarget = target;
-        ws.send(JSON.stringify({
-            action: 'call',
-            target: target,
-            call_type: callType
-        }));
+        ws.send(JSON.stringify({ action: 'call', target: target, call_type: callType }));
         showNotification(`Звоним ${target}...`);
     }
 
     function showIncomingCall(from, callType) {
-        document.getElementById('call-text').textContent = `Входящий звонок от ${from}`;
+        document.getElementById('call-from').textContent = `От: ${from}`;
         document.getElementById('call-modal').classList.add('show');
         currentCallTarget = from;
     }
 
     function acceptCall() {
         document.getElementById('call-modal').classList.remove('show');
-        ws.send(JSON.stringify({
-            action: 'call_accept',
-            target: currentCallTarget
-        }));
+        ws.send(JSON.stringify({ action: 'call_accept', target: currentCallTarget }));
         startVideoCall(currentCallTarget);
     }
 
     function rejectCall() {
         document.getElementById('call-modal').classList.remove('show');
-        ws.send(JSON.stringify({
-            action: 'call_reject',
-            target: currentCallTarget
-        }));
+        ws.send(JSON.stringify({ action: 'call_reject', target: currentCallTarget }));
     }
 
     async function startVideoCall(target) {
@@ -891,7 +1539,6 @@
                 iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
             });
 
-
             localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, localStream);
             });
@@ -902,22 +1549,14 @@
 
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    ws.send(JSON.stringify({
-                        action: 'ice_candidate',
-                        target: target,
-                        candidate: event.candidate
-                    }));
+                    ws.send(JSON.stringify({ action: 'ice_candidate', target: target, candidate: event.candidate }));
                 }
             };
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
 
-            ws.send(JSON.stringify({
-                action: 'offer',
-                target: target,
-                offer: offer
-            }));
+            ws.send(JSON.stringify({ action: 'offer', target: target, offer: offer }));
         } catch (e) {
             showNotification('Ошибка доступа к камере: ' + e.message, 'error');
         }
@@ -943,11 +1582,7 @@
 
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    ws.send(JSON.stringify({
-                        action: 'ice_candidate',
-                        target: from,
-                        candidate: event.candidate
-                    }));
+                    ws.send(JSON.stringify({ action: 'ice_candidate', target: from, candidate: event.candidate }));
                 }
             };
 
@@ -955,11 +1590,7 @@
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
 
-            ws.send(JSON.stringify({
-                action: 'answer',
-                target: from,
-                answer: answer
-            }));
+            ws.send(JSON.stringify({ action: 'answer', target: from, answer: answer }));
         } catch (e) {
             showNotification('Ошибка: ' + e.message, 'error');
         }
@@ -980,14 +1611,95 @@
     }
 
     function endCall() {
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-        }
-        if (peerConnection) {
-            peerConnection.close();
-        }
+        if (localStream) localStream.getTracks().forEach(track => track.stop());
+        if (peerConnection) peerConnection.close();
         document.getElementById('video-call-ui').classList.remove('show');
         showNotification('Звонок завершён');
+    }
+
+    // ============ Game Detection & Overlay ============
+    let currentGame = null;
+
+    function startGameDetection() {
+        // Simulate game detection (in real app, would use native APIs)
+        setInterval(detectGame, 5000);
+        updateGameOverlay();
+    }
+
+    function detectGame() {
+        // This is a simulation - in a real app, you'd use native code
+        // to detect running games via process list or game API
+        const games = Object.keys(gameProcesses);
+        const random = Math.random();
+        
+        if (random > 0.7) {
+            currentGame = games[Math.floor(Math.random() * games.length)];
+        } else {
+            currentGame = null;
+        }
+        
+        updateGameOverlay();
+    }
+
+    function updateGameOverlay() {
+        const overlay = document.getElementById('game-overlay');
+        const gameIcon = document.getElementById('game-icon');
+        const gameName = document.getElementById('game-name');
+        const gameStatus = document.getElementById('game-status');
+        const onlineList = document.getElementById('overlay-online-users');
+
+        if (currentGame) {
+            const game = gameProcesses[currentGame];
+            gameIcon.textContent = game.icon;
+            gameIcon.style.background = game.color;
+            gameName.textContent = currentGame;
+            gameStatus.textContent = 'Играю прямо сейчас';
+            overlay.classList.add('show');
+        } else {
+            gameIcon.textContent = '🎮';
+            gameIcon.style.background = 'var(--bg-tertiary)';
+            gameName.textContent = 'Mesange';
+            gameStatus.textContent = 'В сети';
+            overlay.classList.add('show');
+        }
+
+        // Update online users list
+        onlineList.innerHTML = '';
+        onlineUsers.forEach(user => {
+            const div = document.createElement('div');
+            div.className = 'online-user-item';
+            div.innerHTML = `<div class="status-dot"></div>${user}`;
+            onlineList.appendChild(div);
+        });
+
+        if (onlineUsers.length === 0) {
+            onlineList.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">Нет других пользователей онлайн</p>';
+        }
+    }
+
+    // DM functions
+    async function openDMPage(userId, username) {
+        document.getElementById('room-name').textContent = `ЛС: ${username}`;
+        await loadDMMessages(userId);
+        document.getElementById('sidebar').classList.remove('show');
+    }
+
+    async function loadDMMessages(userId) {
+        try {
+            const response = await fetch(`/api/dm/${userId}?username=${currentUser}`);
+            const messages = await response.json();
+
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+
+            messages.forEach(msg => {
+                appendMessage(msg.content, msg.is_mine ? currentUser : 'Собеседник', msg.created_at, msg.is_mine, msg.id, msg.sender_id);
+            });
+
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        } catch (e) {
+            console.error('Ошибка загрузки сообщений:', e);
+        }
     }
 </script>
 </body>
