@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Dependencies, HTTPException, status, Form, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -53,7 +53,7 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections = {}
         self.online_users = {}
-        self.peer_connections = {}  # For WebRTC: username -> websocket
+        self.peer_connections = {}
 
     async def connect(self, websocket, room_id, username, user_id):
         if room_id not in self.active_connections:
@@ -69,7 +69,6 @@ class ConnectionManager:
             "user_id": user_id,
             "joined_at": datetime.utcnow()
         }
-        # Update user online status
         db = SessionLocal()
         user = db.query(User).filter(User.username == username).first()
         if user:
@@ -89,7 +88,6 @@ class ConnectionManager:
                 del self.active_connections[room_id]
         if username in self.online_users:
             del self.online_users[username]
-        # Update user offline status
         db = SessionLocal()
         user = db.query(User).filter(User.username == username).first()
         if user:
@@ -108,7 +106,6 @@ class ConnectionManager:
                     pass
 
     async def send_to_user(self, username, message):
-        """Send message to specific user if online"""
         if username in self.online_users:
             try:
                 await self.online_users[username]["websocket"].send_json(message)
@@ -149,11 +146,10 @@ def get_current_user(username: str, db: Session):
         raise HTTPException(status_code=403, detail="You are banned")
     return user
 
-def check_admin(user: User):
+def check_admin(user):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
 
-# Pydantic models for validation
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6, max_length=100)
@@ -208,6 +204,7 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         return JSONResponse({"success": False, "error": "Username already exists"}, status_code=400)
 
+
     is_first_user = db.query(User).count() == 0
     
     salt = generate_salt()
@@ -230,7 +227,6 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     logger.info(f"\u2705 User registered: {username} (admin: {is_first_user})")
     return {"success": True, "username": username, "is_admin": is_first_user, "user_id": user.id}
 
-
 @app.post("/api/login")
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     username = request.username.strip()
@@ -247,7 +243,6 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     if not verify_password(password, user.password_hash, user.salt):
         return JSONResponse({"success": False, "error": "Invalid credentials"}, status_code=401)
     
-    # Update online status
     user.is_online = True
     user.last_seen = datetime.utcnow()
     db.commit()
@@ -310,33 +305,27 @@ async def get_messages(room_id: int, limit: int = 50, offset: int = 0, db: Sessi
         })
     return result
 
-# ============ DM ENDPOINTS ============
-
 @app.get("/api/dm")
 async def get_dm_conversations(username: str = Query(...), db: Session = Depends(get_db)):
-    """Get list of DM conversations for a user"""
     user = db.query(User).filter(User.username == username).first()
     if not user:
         return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
     
-    # Get users the current user has chatted with
     sent = db.query(DirectMessage.receiver_id).filter(DirectMessage.sender_id == user.id).distinct().all()
     received = db.query(DirectMessage.sender_id).filter(DirectMessage.receiver_id == user.id).distinct().all()
     
     user_ids = set([r[0] for r in sent] + [r[0] for r in received])
-    user_ids.discard(user.id)  # Remove self
+    user_ids.discard(user.id)
     
     conversations = []
     for uid in user_ids:
         other_user = db.query(User).filter(User.id == uid).first()
         if other_user:
-            # Get last message
             last_msg = db.query(DirectMessage).filter(
                 ((DirectMessage.sender_id == user.id) & (DirectMessage.receiver_id == uid)) |
                 ((DirectMessage.sender_id == uid) & (DirectMessage.receiver_id == user.id))
             ).order_by(DirectMessage.created_at.desc()).first()
             
-            # Unread count
             unread = db.query(DirectMessage).filter(
                 DirectMessage.receiver_id == user.id,
                 DirectMessage.sender_id == uid,
@@ -356,7 +345,6 @@ async def get_dm_conversations(username: str = Query(...), db: Session = Depends
 
 @app.get("/api/dm/{other_user_id}")
 async def get_dm_messages(other_user_id: int, username: str = Query(...), limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
-    """Get DM messages between two users"""
     user = db.query(User).filter(User.username == username).first()
     if not user:
         return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
@@ -370,7 +358,6 @@ async def get_dm_messages(other_user_id: int, username: str = Query(...), limit:
         ((DirectMessage.sender_id == other_user_id) & (DirectMessage.receiver_id == user.id))
     ).order_by(DirectMessage.created_at.desc()).offset(offset).limit(limit).all()
     
-    # Mark messages as read
     for msg in messages:
         if msg.receiver_id == user.id and not msg.is_read:
             msg.is_read = True
@@ -390,7 +377,6 @@ async def get_dm_messages(other_user_id: int, username: str = Query(...), limit:
 
 @app.post("/api/dm")
 async def send_dm(request: DMRequest, username: str = Query(...), db: Session = Depends(get_db)):
-    """Send a direct message"""
     sender = db.query(User).filter(User.username == username).first()
     if not sender:
         return JSONResponse({"success": False, "error": "User not found"}, status_code=404)
@@ -407,7 +393,6 @@ async def send_dm(request: DMRequest, username: str = Query(...), db: Session = 
     db.commit()
     db.refresh(dm)
     
-    # Send real-time notification if online
     await manager.send_to_user(receiver.username, {
         "type": "dm",
         "content": request.content,
@@ -417,8 +402,6 @@ async def send_dm(request: DMRequest, username: str = Query(...), db: Session = 
     
     logger.info(f"\uD83D\uDCDD DM sent from {sender.username} to {receiver.username}")
     return {"success": True, "message_id": dm.id}
-
-# ============ END DM ENDPOINTS ============
 
 @app.delete("/api/rooms/{room_id}")
 async def delete_room(room_id: int, username: str, db: Session = Depends(get_db)):
@@ -472,6 +455,7 @@ async def edit_message(message_id: int, request: EditMessageRequest, username: s
     })
     return {"success": True, "content": message.content, "is_edited": True}
 
+
 @app.get("/api/admin/users")
 async def get_all_users(username: str, db: Session = Depends(get_db)):
     user = get_current_user(username, db)
@@ -481,6 +465,7 @@ async def get_all_users(username: str, db: Session = Depends(get_db)):
         "id": u.id, "username": u.username, "is_admin": u.is_admin, "is_banned": u.is_banned,
         "created_at": u.created_at.isoformat(), "is_online": manager.is_user_online(u.username)
     } for u in users]
+
 
 @app.post("/api/admin/ban/{user_id}")
 async def ban_user(user_id: int, username: str, db: Session = Depends(get_db)):
@@ -528,7 +513,7 @@ async def get_online_users(username: str, db: Session = Depends(get_db)):
     return {"online": manager.get_online_users(), "count": manager.get_online_count()}
 
 @app.get("/api/admin/stats")
-async def get_stats(username: str, db: Session = Dependencies(get_db)):
+async def get_stats(username: str, db: Session = Depends(get_db)):
     user = get_current_user(username, db)
     check_admin(user)
     return {
@@ -614,11 +599,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     manager.disconnect(websocket, current_room, current_username)
                     current_room = None
 
-            # ============ WebRTC Signaling ============
             elif action == "call":
-                # User wants to call someone
                 target_user = data.get("target")
-                call_type = data.get("call_type", "video")  # video or audio
+                call_type = data.get("call_type", "video")
                 
                 if manager.is_user_online(target_user):
                     await manager.send_to_user(target_user, {
@@ -638,7 +621,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
 
             elif action == "call_accept":
-                # User accepted the call
                 target_user = data.get("target")
                 await manager.send_to_user(target_user, {
                     "type": "call_accepted",
@@ -646,7 +628,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif action == "call_reject":
-                # User rejected the call
                 target_user = data.get("target")
                 await manager.send_to_user(target_user, {
                     "type": "call_rejected",
@@ -654,7 +635,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif action == "offer":
-                # WebRTC offer
                 target_user = data.get("target")
                 offer = data.get("offer")
                 await manager.send_to_user(target_user, {
@@ -664,7 +644,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
             elif action == "answer":
-                # WebRTC answer
                 target_user = data.get("target")
                 answer = data.get("answer")
                 await manager.send_to_user(target_user, {
@@ -673,9 +652,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "answer": answer
                 })
 
-
             elif action == "ice_candidate":
-                # ICE candidate exchange
                 target_user = data.get("target")
                 candidate = data.get("candidate")
                 await manager.send_to_user(target_user, {
@@ -683,8 +660,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     "from": current_username,
                     "candidate": candidate
                 })
-            # ============ End WebRTC ============
-
 
     except WebSocketDisconnect:
         logger.info("\uD83D\uDC4C WebSocket disconnected")
