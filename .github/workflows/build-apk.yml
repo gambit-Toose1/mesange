@@ -1,0 +1,69 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+      
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+      
+      - name: Install dependencies
+        run: |
+          cd mobile
+          flutter pub get
+      
+      - name: Build APK
+        run: |
+          cd mobile
+          flutter build apk --release
+      
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesange-apk
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.0
+          name: Mesange v1.0.0
+          body: |
+            ## Mesange Messenger v1.0.0
+            
+            ### Features
+            - ✅ Direct Messages (DMs)
+            - ✅ WebRTC Video/Audio Calls
+            - ✅ Game Detection Overlay
+            - ✅ Modern Dark UI Redesign
+            - ✅ Mobile App (Flutter)
+            - ✅ Desktop App with Overlay (PyQt6)
+            
+            ### How to Install
+            1. Download the APK below
+            2. Enable "Install from unknown sources" in settings
+            3. Install and enjoy!
+          files: mobile/build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
