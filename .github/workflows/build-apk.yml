@@ -25,6 +25,12 @@ jobs:
           cd mobile
           flutter create --org com.mesange --project-name mesange --platforms android .
       
+      - name: Fix pubspec.yaml dependencies
+        run: |
+          cd mobile
+          sed -i 's/flutter_local_notifications: .*/flutter_local_notifications: ^17.0.0/' pubspec.yaml
+          flutter pub get
+      
       - name: Build APK
         run: |
           cd mobile
