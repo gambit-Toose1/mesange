@@ -20,14 +20,21 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
       
-      - name: Create Flutter project structure
+      - name: Create Flutter project and copy only android folder
         run: |
           cd mobile
+          # Create temp project
+          cd ..
+          rm -rf temp_flutter
+          mkdir temp_flutter
+          cd temp_flutter
           flutter create --org com.mesange --project-name mesange --platforms android .
-      
-      - name: Fix pubspec.yaml dependencies
-        run: |
-          cd mobile
+          
+          # Copy only android folder to mobile
+          cp -r android ../mesange/mobile/
+          
+          # Go back to mobile and fix dependencies
+          cd ../mesange/mobile
           sed -i 's/flutter_local_notifications: .*/flutter_local_notifications: ^17.0.0/' pubspec.yaml
           flutter pub get
       
