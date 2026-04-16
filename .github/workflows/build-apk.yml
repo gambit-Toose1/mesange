@@ -20,34 +20,33 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
       
-      - name: Create Flutter project and copy only android folder
+      - name: Create Flutter project and copy android folder
         run: |
-          cd mobile
-          # Create temp project
-          cd ..
+          # Create temp project in /tmp
+          cd /tmp
           rm -rf temp_flutter
           mkdir temp_flutter
           cd temp_flutter
           flutter create --org com.mesange --project-name mesange --platforms android .
           
-          # Copy only android folder to mobile
-          cp -r android ../mesange/mobile/
+          # Copy android folder to mobile in repo
+          cp -r android /home/runner/work/mesange/mesange/mobile/
           
-          # Go back to mobile and fix dependencies
-          cd ../mesange/mobile
+          # Fix dependencies
+          cd /home/runner/work/mesange/mesange/mobile
           sed -i 's/flutter_local_notifications: .*/flutter_local_notifications: ^17.0.0/' pubspec.yaml
           flutter pub get
       
       - name: Build APK
         run: |
-          cd mobile
+          cd /home/runner/work/mesange/mesange/mobile
           flutter build apk --release
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mesange-apk
-          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: /home/runner/work/mesange/mesange/mobile/build/app/outputs/flutter-apk/app-release.apk
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -69,6 +68,6 @@ jobs:
             1. Download the APK below
             2. Enable "Install from unknown sources" in settings
             3. Install and enjoy!
-          files: mobile/build/app/outputs/flutter-apk/app-release.apk
+          files: /home/runner/work/mesange/mesange/mobile/build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
