@@ -67,8 +67,10 @@ class MessageCreate(BaseModel):
 
 class GameStatusUpdate(BaseModel):
     game_name: Optional[str] = None
-    is_playing: bool
+    is_playing: bool = False
     details: Optional[str] = None
+    confidence: Optional[int] = 100  # Уровень уверенности обнаружения (0-100)
+    method: Optional[str] = "manual"  # Метод обнаружения: manual, process, window, heuristic
 
 class ServerStats(BaseModel):
     cpu_percent: float
@@ -344,17 +346,25 @@ async def update_game_status(game_status: GameStatusUpdate, user: User = Depends
         current_status["game"] = game_status.game_name
         current_status["is_playing"] = True
         current_status["details"] = game_status.details
+        current_status["confidence"] = game_status.confidence
+        current_status["method"] = game_status.method
         current_status["started_at"] = datetime.utcnow().isoformat()
+        print(f"🎮 User {user.username} started playing {game_status.game_name} ({game_status.method}, {game_status.confidence}%)")
     else:
+        old_game = current_status.get("game")
         current_status["game"] = None
         current_status["is_playing"] = False
         current_status["details"] = None
+        current_status["confidence"] = None
+        current_status["method"] = None
+        if old_game:
+            print(f"❌ User {user.username} stopped playing {old_game}")
     
     user_status[user.id] = current_status
     user.last_seen = datetime.utcnow()
     db.commit()
     
-    # Broadcast status update
+    # Broadcast status update to all connected users
     await broadcast_user_status(user.id, current_status)
     
     return current_status
@@ -376,12 +386,13 @@ async def broadcast_to_room(room_id: int, data: dict):
         del connected_users[uid]
 
 async def broadcast_user_status(user_id: int, status_data: dict):
+    """Рассылает обновленный статус пользователя всем подключенным клиентам"""
     data = {
-        "type": "user_status_update",
+        "type": "user_status",  # Изменили тип сообщения для совместимости с index.html
         "user_id": user_id,
         "status": status_data
     }
-    await broadcast_to_room(None, data)  # Отправить всем
+    await broadcast_to_room(None, data)  # Отправить всем подключенным пользователям
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
