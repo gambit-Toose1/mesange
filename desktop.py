@@ -109,6 +109,10 @@ class MesangeDesktop(QApplication):
                 self.main_window.add_system_message(data.get("content"))
         elif msg_type == "dm":
             self.show_notification(f"ЛС от {data.get('sender')}", data.get("content"))
+        elif msg_type == "kicked":
+            QMessageBox.warning(None, "Ошибка", data.get("content", "Вы были исключены"))
+            if self.main_window:
+                self.main_window.close()
 
     def on_ws_close(self, ws, close_status_code, close_msg):
         print("WebSocket disconnected")
