@@ -16,6 +16,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
     is_online = Column(Boolean, default=False)
+    
+    # Game status fields
+    current_game = Column(String, nullable=True)
+    game_details = Column(String, nullable=True)
+    is_playing = Column(Boolean, default=False)
 
     messages = relationship("Message", back_populates="user", cascade="all, delete-orphan")
     sent_dms = relationship("DirectMessage", foreign_keys="DirectMessage.sender_id", back_populates="sender")

@@ -17,21 +17,75 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from pystray import MenuItem as Item
 import pystray
+import psutil
 
 # Конфигурация
 SERVER_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws"
 
-# Игры для отслеживания
-GAME_PROCESSES = {
-    'Dota 2': {'icon': '🎮', 'color': '#e44c2c'},
-    'Fortnite': {'icon': '🏝️', 'color': '#9c4dbc'},
-    'War Thunder': {'icon': '✈️', 'color': '#f5a623'},
-    'cs2': {'icon': '🔫', 'color': '#de9b35'},
-    'GTAV': {'icon': '🚗', 'color': '#6cd300'},
-    'Minecraft': {'icon': '⛏️', 'color': '#62b47a'},
-    'League of Legends': {'icon': '⚔️', 'color': '#c89b3c'},
-    'Valorant': {'icon': '🎯', 'color': '#ff4655'},
+# Расширенная база данных игр для точного определения
+# Формат: 'Название': {'icon': 'эмодзи', 'color': 'hex', 'processes': ['имя_процесса'], 'titles': ['часть_заголовка_окна']}
+GAME_DATABASE = {
+    # Шутеры
+    'Counter-Strike 2': {'icon': '🔫', 'color': '#de9b35', 'processes': ['cs2', 'csgo'], 'titles': ['Counter-Strike']},
+    'Counter-Strike: Global Offensive': {'icon': '🔫', 'color': '#de9b35', 'processes': ['csgo'], 'titles': ['CS:GO']},
+    'Valorant': {'icon': '🎯', 'color': '#ff4655', 'processes': ['valorant', 'vgc', 'vgtray'], 'titles': ['VALORANT']},
+    'Overwatch 2': {'icon': '🛡️', 'color': '#f99e1a', 'processes': ['overwatch', 'overwatch2'], 'titles': ['Overwatch']},
+    'Apex Legends': {'icon': '🏃', 'color': '#d92027', 'processes': ['r5apex'], 'titles': ['Apex Legends']},
+    'Call of Duty: Warzone': {'icon': '💣', 'color': '#6aa84f', 'processes': ['cod', 'warzone', 'modernwarfare'], 'titles': ['Call of Duty', 'Warzone']},
+    'Rainbow Six Siege': {'icon': '🚨', 'color': '#333333', 'processes': ['rainbowsix', 'siege'], 'titles': ['Rainbow Six', 'Siege']},
+    'Team Fortress 2': {'icon': '🎩', 'color': '#b88636', 'processes': ['hl2', 'tf2'], 'titles': ['Team Fortress']},
+    'Destiny 2': {'icon': '🌌', 'color': '#ce2829', 'processes': ['destiny2', 'destiny'], 'titles': ['Destiny']},
+    
+    # MOBA
+    'League of Legends': {'icon': '⚔️', 'color': '#c89b3c', 'processes': ['leagueoflegends', 'lolclient', 'leagueclient'], 'titles': ['League of Legends']},
+    'Dota 2': {'icon': '🎮', 'color': '#e44c2c', 'processes': ['dota2', 'dota'], 'titles': ['Dota 2']},
+    'Heroes of the Storm': {'icon': '⛈️', 'color': '#a332c7', 'processes': ['heroesofthestorm', 'heroes'], 'titles': ['Heroes of the Storm']},
+    
+    # Королевские битвы / Выживание
+    'Fortnite': {'icon': '🏝️', 'color': '#9c4dbc', 'processes': ['fortnite', 'epicgameslauncher'], 'titles': ['Fortnite']},
+    'PUBG: BATTLEGROUNDS': {'icon': '🪖', 'color': '#f2a900', 'processes': ['tslgame', 'pubg'], 'titles': ['PUBG']},
+    'Rust': {'icon': '🔨', 'color': '#cd3232', 'processes': ['rustclient', 'rust'], 'titles': ['Rust']},
+    'ARK: Survival Evolved': {'icon': '🦕', 'color': '#008080', 'processes': ['arkse', 'shooter_game'], 'titles': ['ARK']},
+    'Minecraft': {'icon': '⛏️', 'color': '#62b47a', 'processes': ['minecraft', 'javaw'], 'titles': ['Minecraft']},
+    'Terraria': {'icon': '⚒️', 'color': '#5b9bd5', 'processes': ['terraria'], 'titles': ['Terraria']},
+    
+    # RPG
+    'The Witcher 3': {'icon': '🗡️', 'color': '#8b0000', 'processes': ['witcher3', 'cyberpunk'], 'titles': ['Witcher']},
+    'Cyberpunk 2077': {'icon': '🤖', 'color': '#fcee0a', 'processes': ['cyberpunk2077'], 'titles': ['Cyberpunk']},
+    'Elden Ring': {'icon': '💍', 'color': '#c9a66b', 'processes': ['eldenring'], 'titles': ['ELDEN RING']},
+    'Skyrim': {'icon': '🐉', 'color': '#5a5a5a', 'processes': ['skyrimse', 'skyrimvr', 'tesv'], 'titles': ['Skyrim', 'Elder Scrolls']},
+    'Genshin Impact': {'icon': '✨', 'color': '#7a8fa3', 'processes': ['genshinimpact', 'yuan_shen'], 'titles': ['Genshin Impact']},
+    'World of Warcraft': {'icon': '🛡️', 'color': '#f8b700', 'processes': ['wow', 'worldofwarcraft'], 'titles': ['World of Warcraft']},
+    'Final Fantasy XIV': {'icon': '⭐', 'color': '#0057ff', 'processes': ['ffxiv', 'finalfantasy'], 'titles': ['FINAL FANTASY XIV']},
+    
+    # Стратегии / Симуляторы
+    'StarCraft II': {'icon': '🚀', 'color': '#0044bb', 'processes': ['starcraft', 'sc2'], 'titles': ['StarCraft']},
+    'Civilization VI': {'icon': '🏛️', 'color': '#6a5acd', 'processes': ['civilization', 'civ6'], 'titles': ['Civilization']},
+    'The Sims 4': {'icon': '🏠', 'color': '#00a8e1', 'processes': ['ts4', 'thesims4'], 'titles': ['The Sims']},
+    'Cities: Skylines': {'icon': '🏙️', 'color': '#ff6600', 'processes': ['cities', 'skylines'], 'titles': ['Cities: Skylines']},
+    
+    # Песочницы / Творчество
+    'Roblox': {'icon': '🧱', 'color': '#de2828', 'processes': ['robloxplayerbeta', 'roblox'], 'titles': ['Roblox']},
+    'Stardew Valley': {'icon': '🌾', 'color': '#ff9933', 'processes': ['stardewvalley'], 'titles': ['Stardew Valley']},
+    
+    # Гонки / Спорт
+    'Grand Theft Auto V': {'icon': '🚗', 'color': '#6cd300', 'processes': ['gta5', 'gtav'], 'titles': ['Grand Theft Auto', 'GTA V']},
+    'Forza Horizon 5': {'icon': '🏎️', 'color': '#ff6b00', 'processes': ['forza', 'horizon5'], 'titles': ['Forza']},
+    'FIFA 23': {'icon': '⚽', 'color': '#000000', 'processes': ['fifa23', 'fifa'], 'titles': ['FIFA']},
+    'Rocket League': {'icon': '🚀⚽', 'color': '#0077be', 'processes': ['rocketleague'], 'titles': ['Rocket League']},
+    
+    # Лаунчеры (резервное определение)
+    'Steam': {'icon': '🎮', 'color': '#171a21', 'processes': ['steam', 'steamwebhelper'], 'titles': ['Steam']},
+    'Discord': {'icon': '💬', 'color': '#5865f2', 'processes': ['discord', 'discordcanary'], 'titles': ['Discord']},
+    'Epic Games': {'icon': '🎯', 'color': '#333333', 'processes': ['epicgameslauncher'], 'titles': ['Epic Games']},
+}
+
+# Эвристика для универсальных процессов
+GENERIC_PROCESS_HEURISTICS = {
+    'javaw.exe': ['Minecraft', 'Old School RuneScape', 'Runescape'],
+    'unity.exe': ['Unity Game'],
+    'unrealengine.exe': ['Unreal Engine Game'],
 }
 
 class MesangeDesktop(QApplication):
@@ -109,6 +163,10 @@ class MesangeDesktop(QApplication):
                 self.main_window.add_system_message(data.get("content"))
         elif msg_type == "dm":
             self.show_notification(f"ЛС от {data.get('sender')}", data.get("content"))
+        elif msg_type == "kicked":
+            QMessageBox.warning(None, "Ошибка", data.get("content", "Вы были исключены"))
+            if self.main_window:
+                self.main_window.close()
 
     def on_ws_close(self, ws, close_status_code, close_msg):
         print("WebSocket disconnected")
@@ -148,39 +206,142 @@ class MesangeDesktop(QApplication):
         self.quit()
 
     def start_game_detection(self):
+        """Запускает поток обнаружения игр с улучшенной эвристикой"""
         def detect():
+            last_check = {}  # Для debounce (предотвращение мерцания)
+            consecutive_matches = {}  # Счётчик последовательных совпадений
+            
             while True:
                 try:
-                    # Windows: tasklist
-                    result = subprocess.run(
-                        ['tasklist'],
-                        capture_output=True,
-                        text=True,
-                        shell=True
-                    )
-                    processes = result.stdout.lower()
+                    # Получаем список процессов через psutil (кроссплатформенно)
+                    running_processes = []
+                    window_titles = []
                     
-                    detected = None
-                    for game_name, game_info in GAME_PROCESSES.items():
-                        if game_name.lower() in processes:
-                            detected = game_name
-                            break
-                    
-                    if detected != self.current_game:
-                        self.current_game = detected
-                        self.update_overlay()
+                    try:
+                        # Используем psutil для получения процессов
+                        for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                            try:
+                                proc_name = proc.info['name'].lower() if proc.info['name'] else ''
+                                proc_exe = proc.info['exe'] or ''
+                                running_processes.append({
+                                    'name': proc_name,
+                                    'exe': proc_exe.lower(),
+                                    'pid': proc.info['pid']
+                                })
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                continue
                         
-                        # Отправить статус игры на сервер (опционально)
-                        if self.ws and self.ws.sock and self.ws.sock.connected:
-                            self.ws.send(json.dumps({
-                                "action": "game_status",
-                                "game": detected
-                            }))
+                        # Получаем заголовки окон (только Windows)
+                        if sys.platform == 'win32':
+                            import subprocess
+                            result = subprocess.run(
+                                ['powershell', '-Command', 
+                                 'Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object MainWindowTitle -ExpandProperty MainWindowTitle'],
+                                capture_output=True,
+                                text=True,
+                                timeout=5
+                            )
+                            window_titles = [line.strip().lower() for line in result.stdout.split('\n') if line.strip()]
+                    except Exception as e:
+                        print(f"Process enumeration error: {e}")
+                        time.sleep(5)
+                        continue
+                    
+                    detected_game = None
+                    confidence = 0
+                    detection_method = None
+                    
+                    # Метод 1: Точное совпадение по имени процесса
+                    for game_name, game_info in GAME_DATABASE.items():
+                        processes = game_info.get('processes', [])
+                        for proc in running_processes:
+                            proc_name = proc['name']
+                            if any(p.lower() in proc_name or proc_name in p.lower() for p in processes):
+                                # Высокая уверенность - точное совпадение процесса
+                                if proc_name in [p.lower() for p in processes]:
+                                    new_confidence = 100
+                                else:
+                                    new_confidence = 80
+                                
+                                if new_confidence > confidence:
+                                    detected_game = game_name
+                                    confidence = new_confidence
+                                    detection_method = 'process'
+                    
+                    # Метод 2: Совпадение по заголовку окна (если процесс не найден)
+                    if not detected_game and window_titles:
+                        for game_name, game_info in GAME_DATABASE.items():
+                            titles = game_info.get('titles', [])
+                            for title in window_titles:
+                                if any(t.lower() in title for t in titles):
+                                    new_confidence = 70
+                                    if new_confidence > confidence:
+                                        detected_game = game_name
+                                        confidence = new_confidence
+                                        detection_method = 'window'
+                    
+                    # Метод 3: Эвристика для универсальных процессов (Java, Unity, Unreal)
+                    if not detected_game:
+                        for proc in running_processes:
+                            proc_name = proc['name']
+                            if proc_name in GENERIC_PROCESS_HEURISTICS:
+                                candidates = GENERIC_PROCESS_HEURISTICS[proc_name]
+                                # Проверяем путь к исполняемому файлу для уточнения
+                                proc_exe = proc['exe']
+                                for candidate in candidates:
+                                    if candidate.lower() in proc_exe or any(c.lower() in proc_exe for c in GAME_DATABASE.get(candidate, {}).get('processes', [])):
+                                        detected_game = candidate
+                                        confidence = 60
+                                        detection_method = 'heuristic'
+                                        break
+                    
+                    # Debounce логика: требуем 3 последовательных совпадения для подтверждения
+                    if detected_game:
+                        consecutive_matches[detected_game] = consecutive_matches.get(detected_game, 0) + 1
+                        if consecutive_matches[detected_game] >= 3:
+                            # Игра подтверждена
+                            if detected_game != self.current_game:
+                                old_game = self.current_game
+                                self.current_game = detected_game
+                                self.update_overlay()
+                                
+                                # Отправить статус игры на сервер
+                                if self.ws and hasattr(self.ws, 'sock') and self.ws.sock and self.ws.sock.connected:
+                                    try:
+                                        self.ws.send(json.dumps({
+                                            "action": "game_status",
+                                            "game": detected_game,
+                                            "confidence": confidence,
+                                            "method": detection_method
+                                        }))
+                                        print(f"🎮 Game detected: {detected_game} ({detection_method}, {confidence}%)")
+                                    except Exception as e:
+                                        print(f"WebSocket send error: {e}")
+                        else:
+                            # Ещё не достаточно подтверждений
+                            pass
+                    else:
+                        # Сбрасываем счётчики если игра не найдена
+                        consecutive_matches.clear()
+                        if self.current_game is not None:
+                            old_game = self.current_game
+                            self.current_game = None
+                            self.update_overlay()
                             
+                            if self.ws and hasattr(self.ws, 'sock') and self.ws.sock and self.ws.sock.connected:
+                                try:
+                                    self.ws.send(json.dumps({
+                                        "action": "game_status",
+                                        "game": None
+                                    }))
+                                    print(f"❌ Game ended: {old_game}")
+                                except Exception as e:
+                                    print(f"WebSocket send error: {e}")
+                    
                 except Exception as e:
                     print(f"Game detection error: {e}")
                 
-                time.sleep(5)
+                time.sleep(2)  # Уменьшили интервал для более быстрого обнаружения
         
         threading.Thread(target=detect, daemon=True).start()
 
@@ -568,14 +729,47 @@ class GameOverlay(QWidget):
 
     def update_game(self, game, online_users):
         if game:
-            game_info = GAME_PROCESSES.get(game, {'icon': '🎮', 'color': '#00d9ff'})
+            # Используем новую расширенную базу данных GAME_DATABASE
+            game_info = GAME_DATABASE.get(game, {'icon': '🎮', 'color': '#00d9ff'})
             self.game_icon.setText(game_info['icon'])
             self.game_name.setText(game)
             self.status_text.setText("Играю прямо сейчас")
+            
+            # Обновляем цвет оверлея в соответствии с игрой
+            self.setStyleSheet(f"""
+                QWidget {{
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                        stop:0 {game_info['color']}dd, 
+                        stop:1 {game_info['color']}88);
+                    border-radius: 15px;
+                    border: 2px solid {game_info['color']};
+                }}
+                QLabel {{
+                    color: white;
+                    font-weight: bold;
+                    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                }}
+            """)
         else:
             self.game_icon.setText("💬")
             self.game_name.setText("Mesange")
             self.status_text.setText("В сети")
+            
+            # Стандартный стиль когда не в игре
+            self.setStyleSheet("""
+                QWidget {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                        stop:0 #667eeaDD, 
+                        stop:1 #764ba288);
+                    border-radius: 15px;
+                    border: 2px solid #667eea;
+                }
+                QLabel {
+                    color: white;
+                    font-weight: bold;
+                    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                }
+            """)
         
         if online_users:
             self.online_list.setText(", ".join(online_users[:5]))

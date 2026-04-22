@@ -1093,16 +1093,58 @@
     let localStream = null;
     let isMuted = false;
     let onlineUsers = [];
+    let userStatuses = {}; // Хранение статусов пользователей (включая игры)
 
-    // Game detection config
+    // Расширенная база данных игр (аналогично desktop.py)
     const gameProcesses = {
+        // Шутеры
+        'Counter-Strike 2': { icon: '🔫', color: '#de9b35' },
+        'Counter-Strike: Global Offensive': { icon: '🔫', color: '#de9b35' },
+        'Valorant': { icon: '🎯', color: '#ff4655' },
+        'Overwatch 2': { icon: '🛡️', color: '#f99e1a' },
+        'Apex Legends': { icon: '🏃', color: '#d92027' },
+        'Call of Duty: Warzone': { icon: '💣', color: '#6aa84f' },
+        'Rainbow Six Siege': { icon: '🚨', color: '#333333' },
+        'Team Fortress 2': { icon: '🎩', color: '#b88636' },
+        'Destiny 2': { icon: '🌌', color: '#ce2829' },
+        
+        // MOBA
+        'League of Legends': { icon: '⚔️', color: '#c89b3c' },
         'Dota 2': { icon: '🎮', color: '#e44c2c' },
+        'Heroes of the Storm': { icon: '⛈️', color: '#a332c7' },
+        
+        // Королевские битвы / Выживание
         'Fortnite': { icon: '🏝️', color: '#9c4dbc' },
-        'War Thunder': { icon: '✈️', color: '#f5a623' },
-        'CS2': { icon: '🔫', color: '#de9b35' },
-        'GTA V': { icon: '🚗', color: '#6cd300' },
+        'PUBG: BATTLEGROUNDS': { icon: '🪖', color: '#f2a900' },
+        'Rust': { icon: '🔨', color: '#cd3232' },
+        'ARK: Survival Evolved': { icon: '🦕', color: '#008080' },
         'Minecraft': { icon: '⛏️', color: '#62b47a' },
-        'League of Legends': { icon: '⚔️', color: '#c89b3c' }
+        'Terraria': { icon: '⚒️', color: '#5b9bd5' },
+        
+        // RPG
+        'The Witcher 3': { icon: '🗡️', color: '#8b0000' },
+        'Cyberpunk 2077': { icon: '🤖', color: '#fcee0a' },
+        'Elden Ring': { icon: '💍', color: '#c9a66b' },
+        'Skyrim': { icon: '🐉', color: '#5a5a5a' },
+        'Genshin Impact': { icon: '✨', color: '#7a8fa3' },
+        'World of Warcraft': { icon: '🛡️', color: '#f8b700' },
+        'Final Fantasy XIV': { icon: '⭐', color: '#0057ff' },
+        
+        // Стратегии / Симуляторы
+        'StarCraft II': { icon: '🚀', color: '#0044bb' },
+        'Civilization VI': { icon: '🏛️', color: '#6a5acd' },
+        'The Sims 4': { icon: '🏠', color: '#00a8e1' },
+        'Cities: Skylines': { icon: '🏙️', color: '#ff6600' },
+        
+        // Песочницы / Творчество
+        'Roblox': { icon: '🧱', color: '#de2828' },
+        'Stardew Valley': { icon: '🌾', color: '#ff9933' },
+        
+        // Гонки / Спорт
+        'Grand Theft Auto V': { icon: '🚗', color: '#6cd300' },
+        'Forza Horizon 5': { icon: '🏎️', color: '#ff6b00' },
+        'FIFA 23': { icon: '⚽', color: '#000000' },
+        'Rocket League': { icon: '🚀⚽', color: '#0077be' }
     };
 
     function showNotification(message, type = 'success') {
@@ -1403,6 +1445,9 @@
                 handleAnswer(data.answer);
             } else if (data.type === 'ice_candidate') {
                 handleIceCandidate(data.candidate);
+            } else if (data.type === 'user_status') {
+                // Обработка обновления статуса пользователя (включая игру)
+                handleUserStatusUpdate(data.user_id, data.status);
             }
         };
 
@@ -1641,6 +1686,24 @@
         updateGameOverlay();
     }
 
+    // Обработка обновления статуса пользователя (включая игру)
+    function handleUserStatusUpdate(userId, status) {
+        userStatuses[userId] = status;
+        
+        // Обновляем оверлей если это наш статус
+        if (userId === currentUserId) {
+            if (status.is_playing && status.game) {
+                currentGame = status.game;
+            } else {
+                currentGame = null;
+            }
+            updateGameOverlay();
+        }
+        
+        // Можно обновлять список пользователей с отображением их статуса
+        console.log(`User ${userId} status updated:`, status);
+    }
+
     function updateGameOverlay() {
         const overlay = document.getElementById('game-overlay');
         const gameIcon = document.getElementById('game-icon');
@@ -1649,26 +1712,44 @@
         const onlineList = document.getElementById('overlay-online-users');
 
         if (currentGame) {
-            const game = gameProcesses[currentGame];
+            const game = gameProcesses[currentGame] || { icon: '🎮', color: '#667eea' };
             gameIcon.textContent = game.icon;
             gameIcon.style.background = game.color;
             gameName.textContent = currentGame;
             gameStatus.textContent = 'Играю прямо сейчас';
             overlay.classList.add('show');
+            
+            // Динамическое изменение стиля оверлея под цвет игры
+            overlay.style.background = `linear-gradient(135deg, ${game.color}dd, ${game.color}88)`;
+            overlay.style.borderColor = game.color;
         } else {
             gameIcon.textContent = '🎮';
             gameIcon.style.background = 'var(--bg-tertiary)';
             gameName.textContent = 'Mesange';
             gameStatus.textContent = 'В сети';
             overlay.classList.add('show');
+            
+            // Стандартный стиль
+            overlay.style.background = '';
+            overlay.style.borderColor = '';
         }
 
-        // Update online users list
+        // Update online users list with their game status
         onlineList.innerHTML = '';
         onlineUsers.forEach(user => {
             const div = document.createElement('div');
             div.className = 'online-user-item';
-            div.innerHTML = `<div class="status-dot"></div>${user}`;
+            
+            // Находим userId для этого пользователя и проверяем его статус
+            let userGameStatus = '';
+            for (const [uid, status] of Object.entries(userStatuses)) {
+                if (status.is_playing && status.game) {
+                    // Здесь нужна дополнительная логика для сопоставления username и userId
+                    userGameStatus = ` 🎮 ${status.game}`;
+                }
+            }
+            
+            div.innerHTML = `<div class="status-dot"></div>${user}${userGameStatus}`;
             onlineList.appendChild(div);
         });
 
