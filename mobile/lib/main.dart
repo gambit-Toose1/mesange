@@ -463,15 +463,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
         title: Text('ЛС: ${widget.otherUsername}'),
         backgroundColor: const Color(0xFF16213e),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            onPressed: () {
-              // Video call - TODO: implement WebRTC
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Видеозвонок скоро!')),
-              );
-            },
-          ),
+          // Видеозвонки удалены - фокус на текстовом общении
         ],
       ),
       body: Column(

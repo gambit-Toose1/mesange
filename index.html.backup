@@ -654,6 +654,103 @@
         .btn-success { background: var(--success); color: white; }
         .btn-warning { background: var(--warning); color: var(--bg-primary); }
 
+        /* Call Modal */
+        .call-modal {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 3000;
+            justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+
+        .call-modal.show { display: flex; }
+
+        .call-modal h2 {
+            font-size: 28px; margin-bottom: 16px;
+        }
+
+        .call-modal p {
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .call-buttons {
+            display: flex; gap: 24px;
+        }
+
+        .call-buttons button {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .call-buttons .accept {
+            background: var(--success);
+            color: white;
+        }
+
+        .call-buttons .reject {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Video Call UI */
+        .video-call-ui {
+            display: none;
+            position: fixed; inset: 0;
+            background: #000;
+            z-index: 2500;
+        }
+
+        .video-call-ui.show { display: block; }
+
+        .video-call-ui video {
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+
+        .video-call-ui .local-video {
+            position: absolute;
+            bottom: 30px; right: 30px;
+            width: 180px; height: 135px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 3px solid var(--accent);
+        }
+
+        .call-controls {
+            position: absolute;
+            bottom: 40px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 20px;
+        }
+
+        .call-controls button {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .call-controls .mute-btn {
+            background: var(--glass);
+            color: white;
+        }
+
+        .call-controls .mute-btn.muted {
+            background: var(--danger);
+        }
+
+        .call-controls .end-btn {
+            background: var(--danger);
+            color: white;
+        }
 
         /* Notifications */
         .notification {
@@ -1336,6 +1433,18 @@
             } else if (data.type === 'dm') {
                 showNotification(`Новое ЛС от ${data.sender}: ${data.content}`);
                 loadDMConversations();
+            } else if (data.type === 'incoming_call') {
+                showIncomingCall(data.from, data.call_type);
+            } else if (data.type === 'call_accepted') {
+                startVideoCall(data.from);
+            } else if (data.type === 'call_rejected') {
+                showNotification(`${data.from} отклонил звонок`, 'error');
+            } else if (data.type === 'offer') {
+                handleOffer(data.from, data.offer);
+            } else if (data.type === 'answer') {
+                handleAnswer(data.answer);
+            } else if (data.type === 'ice_candidate') {
+                handleIceCandidate(data.candidate);
             } else if (data.type === 'user_status') {
                 // Обработка обновления статуса пользователя (включая игру)
                 handleUserStatusUpdate(data.user_id, data.status);
