@@ -591,36 +591,173 @@ class MainWindow(QMainWindow):
 
     def add_message(self, data, animate=True):
         is_own = data.get("username") == self.app.username
+        msg_type = data.get("type", "message")
+        
+        # Пропускаем системные сообщения (они обрабатываются отдельно)
+        if msg_type == "system":
+            self.add_system_message(data.get("content", ""))
+            return
         
         msg_widget = QWidget()
+        msg_widget.setStyleSheet("background: transparent;")
         msg_layout = QVBoxLayout()
+        msg_layout.setSpacing(4)
         
         if is_own:
             msg_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         
-        # Имя пользователя
+        # Контейнер для сообщения
+        content_container = QWidget()
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(10, 8, 10, 8)
+        
+        # Имя пользователя (для чужих сообщений)
         if not is_own:
             username = QLabel(data.get("username", "Unknown"))
-            username.setStyleSheet("color: #00d9ff; font-size: 12px;")
-            msg_layout.addWidget(username)
+            username.setStyleSheet("color: #00d9ff; font-size: 12px; font-weight: bold; margin-bottom: 2px;")
+            content_layout.addWidget(username)
         
-        # Сообщение
+        # Цитата/ответ
+        if data.get("reply_to"):
+            reply_widget = QWidget()
+            reply_layout = QHBoxLayout()
+            reply_layout.setContentsMargins(5, 5, 5, 5)
+            
+            reply_line = QLabel("")
+            reply_line.setStyleSheet(f"background: { '#00d9ff' if is_own else '#333' }; min-width: 3px; max-width: 3px;")
+            reply_layout.addWidget(reply_line)
+            
+            reply_text = QLabel(data["reply_to"].get("content", "")[:50] + ("..." if len(data["reply_to"].get("content", "")) > 50 else ""))
+            reply_text.setStyleSheet("color: #888; font-size: 11px; font-style: italic;")
+            reply_text.setWordWrap(True)
+            reply_layout.addWidget(reply_text)
+            reply_layout.addStretch()
+            
+            reply_widget.setLayout(reply_layout)
+            reply_widget.setStyleSheet(f"background: {'#1a1a2e' if is_own else '#0f0f23'}; border-radius: 4px; margin-bottom: 4px;")
+            content_layout.addWidget(reply_widget)
+        
+        # Основной контент
         content = QLabel(data.get("content", ""))
         content.setWordWrap(True)
+        content.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
         if is_own:
             content.setStyleSheet("background: #00d9ff; color: #0f0f23; padding: 10px 15px; border-radius: 15px 15px 4px 15px;")
         else:
             content.setStyleSheet("background: #1a1a2e; color: white; padding: 10px 15px; border-radius: 15px 15px 15px 4px;")
         
-        msg_layout.addWidget(content)
+        content_layout.addWidget(content)
+        
+        # Вложения (файлы)
+        if data.get("attachments"):
+            attachments_layout = QHBoxLayout()
+            attachments_layout.setSpacing(5)
+            
+            for attachment in data["attachments"]:
+                file_widget = QWidget()
+                file_layout = QVBoxLayout()
+                file_layout.setContentsMargins(8, 8, 8, 8)
+                file_layout.setSpacing(2)
+                
+                # Иконка файла
+                file_icon = QLabel("📎")
+                file_icon.setStyleSheet("font-size: 20px;")
+                file_layout.addWidget(file_icon)
+                
+                # Имя файла
+                file_name = QLabel(attachment.get("filename", "file")[:20])
+                file_name.setStyleSheet("color: white; font-size: 11px;")
+                file_name.setWordWrap(True)
+                file_layout.addWidget(file_name)
+                
+                file_widget.setLayout(file_layout)
+                file_widget.setStyleSheet(f"background: {'#00b8d9' if is_own else '#2a2a3e'}; border-radius: 8px;")
+                file_widget.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                attachments_layout.addWidget(file_widget)
+            
+            content_layout.addLayout(attachments_layout)
+        
+        content_container.setLayout(content_layout)
+        
+        # Стиль контейнера в зависимости от владельца
+        if is_own:
+            content_container.setStyleSheet("background: transparent;")
+        else:
+            content_container.setStyleSheet("background: transparent;")
+        
+        msg_layout.addWidget(content_container)
+        
+        # Нижняя панель (время, статусы, действия)
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(8)
         
         # Время
         time_label = QLabel(datetime.now().strftime("%H:%M"))
         time_label.setStyleSheet("color: #666; font-size: 11px;")
-        msg_layout.addWidget(time_label)
+        bottom_layout.addWidget(time_label)
         
+        # Статус доставки/прочтения
+        status_icons = {
+            "sent": "✓",
+            "delivered": "✓✓",
+            "read": "✓✓"
+        }
+        status_colors = {
+            "sent": "#666",
+            "delivered": "#4ecdc4",
+            "read": "#00d9ff"
+        }
+        
+        status = data.get("status", "sent")
+        if is_own and status in status_icons:
+            status_label = QLabel(status_icons[status])
+            status_label.setStyleSheet(f"color: {status_colors[status]}; font-size: 11px; font-weight: bold;")
+            bottom_layout.addWidget(status_label)
+        
+        bottom_layout.addStretch()
+        
+        # Кнопки действий (только для своих сообщений)
+        if is_own:
+            # Редактировать
+            edit_btn = QPushButton("✏️")
+            edit_btn.setFixedSize(20, 20)
+            edit_btn.setStyleSheet("background: transparent; border: none; color: #666; font-size: 10px;")
+            edit_btn.setToolTip("Редактировать")
+            edit_btn.clicked.connect(lambda: self.edit_message(data))
+            bottom_layout.addWidget(edit_btn)
+            
+            # Удалить
+            delete_btn = QPushButton("🗑️")
+            delete_btn.setFixedSize(20, 20)
+            delete_btn.setStyleSheet("background: transparent; border: none; color: #666; font-size: 10px;")
+            delete_btn.setToolTip("Удалить")
+            delete_btn.clicked.connect(lambda: self.delete_message(data))
+            bottom_layout.addWidget(delete_btn)
+            
+            # Ответить
+            reply_btn = QPushButton("↩️")
+            reply_btn.setFixedSize(20, 20)
+            reply_btn.setStyleSheet("background: transparent; border: none; color: #666; font-size: 10px;")
+            reply_btn.setToolTip("Ответить")
+            reply_btn.clicked.connect(lambda: self.reply_to_message(data))
+            bottom_layout.addWidget(reply_btn)
+        
+        # Закрепленное сообщение
+        if data.get("pinned"):
+            pin_label = QLabel("📌")
+            pin_label.setStyleSheet("font-size: 12px;")
+            bottom_layout.addWidget(pin_label)
+        
+        msg_layout.addLayout(bottom_layout)
         msg_widget.setLayout(msg_layout)
+        
+        # Контекстное меню для сообщений
+        msg_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        msg_widget.customContextMenuRequested.connect(
+            lambda pos: self.show_message_context_menu(data, msg_widget.mapToGlobal(pos))
+        )
+        
         self.messages_layout.addWidget(msg_widget)
         
         # Прокрутка вниз
@@ -639,15 +776,165 @@ class MainWindow(QMainWindow):
 
     def send_message(self):
         content = self.message_input.text().strip()
-        if not content or not self.app.ws:
+        if not content and not hasattr(self.app, 'pending_files'):
             return
         
-        self.app.ws.send(json.dumps({
+        # Формируем сообщение с возможными вложениями и ответом
+        message_data = {
             "action": "message",
             "content": content
-        }))
+        }
+        
+        # Добавляем вложения если есть
+        if hasattr(self.app, 'pending_files') and self.app.pending_files:
+            message_data["attachments"] = self.app.pending_files
+        
+        # Добавляем ответ если есть
+        if hasattr(self.app, 'replying_to') and self.app.replying_to:
+            message_data["reply_to"] = self.app.replying_to
+        
+        if self.app.ws:
+            self.app.ws.send(json.dumps(message_data))
         
         self.message_input.clear()
+        
+        # Очищаем временные данные
+        if hasattr(self.app, 'pending_files'):
+            self.app.pending_files = []
+        if hasattr(self.app, 'replying_to'):
+            self.app.replying_to = None
+            # Скрыть индикатор ответа если есть
+            if hasattr(self, 'reply_indicator'):
+                self.reply_indicator.hide()
+
+    def edit_message(self, data):
+        """Редактирование сообщения"""
+        msg_id = data.get("id")
+        current_content = data.get("content", "")
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать сообщение")
+        dialog.setStyleSheet("background: #0f0f23;")
+        layout = QVBoxLayout()
+        
+        text_edit = QTextEdit()
+        text_edit.setPlainText(current_content)
+        text_edit.setStyleSheet("padding: 10px; border-radius: 8px; background: #1a1a2e; border: 1px solid #333; color: white;")
+        layout.addWidget(text_edit)
+        
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        save_btn.setStyleSheet("padding: 10px; border-radius: 8px; background: #00d9ff; color: #0f0f23; font-weight: bold;")
+        save_btn.clicked.connect(lambda: self._save_edit(msg_id, text_edit.toPlainText(), dialog))
+        btn_layout.addWidget(save_btn)
+        
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setStyleSheet("padding: 10px; border-radius: 8px; background: transparent; border: 1px solid #666; color: white;")
+        cancel_btn.clicked.connect(dialog.close)
+        btn_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(btn_layout)
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def _save_edit(self, msg_id, new_content, dialog):
+        """Сохранение отредактированного сообщения"""
+        if not new_content.strip():
+            return
+        
+        if self.app.ws:
+            self.app.ws.send(json.dumps({
+                "action": "edit_message",
+                "message_id": msg_id,
+                "content": new_content
+            }))
+        dialog.close()
+
+    def delete_message(self, data):
+        """Удаление сообщения"""
+        msg_id = data.get("id")
+        
+        confirm = QMessageBox.question(
+            self, "Подтверждение",
+            "Вы уверены, что хотите удалить это сообщение?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm == QMessageBox.StandardButton.Yes and self.app.ws:
+            self.app.ws.send(json.dumps({
+                "action": "delete_message",
+                "message_id": msg_id
+            }))
+
+    def reply_to_message(self, data):
+        """Ответ на сообщение"""
+        self.app.replying_to = {
+            "message_id": data.get("id"),
+            "username": data.get("username"),
+            "content": data.get("content", "")
+        }
+        
+        # Показать индикатор ответа
+        if not hasattr(self, 'reply_indicator'):
+            self.reply_indicator = QLabel()
+            self.reply_indicator.setStyleSheet("background: #1a1a2e; color: #00d9ff; padding: 8px; border-radius: 4px;")
+            self.reply_indicator.setWordWrap(True)
+            
+            # Вставляем индикатор перед полем ввода
+            input_index = self.layout().indexOf(self.findChild(QLineEdit, "message_input"))
+            if input_index > 0:
+                chat_widget = self.parentWidget()
+                chat_layout = chat_widget.layout()
+                chat_layout.insertWidget(input_index, self.reply_indicator)
+        
+        self.reply_indicator.setText(f"↩️ Ответ пользователю {data.get('username')}: {data.get('content', '')[:50]}...")
+        self.reply_indicator.show()
+        
+        self.message_input.setFocus()
+
+    def show_message_context_menu(self, data, pos):
+        """Контекстное меню для сообщения"""
+        menu = QMenu(self)
+        menu.setStyleSheet("background: #1a1a2e; color: white;")
+        
+        # Копировать
+        copy_action = menu.addAction("📋 Копировать")
+        copy_action.triggered.connect(lambda: self._copy_message(data))
+        
+        # Ответить
+        reply_action = menu.addAction("↩️ Ответить")
+        reply_action.triggered.connect(lambda: self.reply_to_message(data))
+        
+        # Только для своих сообщений
+        if data.get("username") == self.app.username:
+            # Редактировать
+            edit_action = menu.addAction("✏️ Редактировать")
+            edit_action.triggered.connect(lambda: self.edit_message(data))
+            
+            # Удалить
+            delete_action = menu.addAction("🗑️ Удалить")
+            delete_action.triggered.connect(lambda: self.delete_message(data))
+        
+        # Закрепить (для админов)
+        if self.app.is_admin:
+            pin_action = menu.addAction("📌 Закрепить" if not data.get("pinned") else "📍 Открепить")
+            pin_action.triggered.connect(lambda: self._toggle_pin(data))
+        
+        menu.exec(pos)
+
+    def _copy_message(self, data):
+        """Копирование сообщения в буфер обмена"""
+        clipboard = QApplication.clipboard()
+        clipboard.setText(data.get("content", ""))
+
+    def _toggle_pin(self, data):
+        """Закрепление/открепление сообщения"""
+        if self.app.ws:
+            self.app.ws.send(json.dumps({
+                "action": "pin_message",
+                "message_id": data.get("id"),
+                "pin": not data.get("pinned", False)
+            }))
 
 
 class GameOverlay(QWidget):
