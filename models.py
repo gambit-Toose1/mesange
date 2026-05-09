@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, LargeBinary
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -21,6 +21,9 @@ class User(Base):
     current_game = Column(String, nullable=True)
     game_details = Column(String, nullable=True)
     is_playing = Column(Boolean, default=False)
+    
+    # Theme preference
+    theme = Column(String, default="light")  # "light" or "dark"
 
     messages = relationship("Message", back_populates="user", cascade="all, delete-orphan")
     sent_dms = relationship("DirectMessage", foreign_keys="DirectMessage.sender_id", back_populates="sender")
@@ -46,13 +49,33 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)  # Может быть NULL для личных сообщений
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     is_deleted = Column(Boolean, default=False)
     is_edited = Column(Boolean, default=False)
+    
+    # Статусы прочтения
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    
+    # Цитирование и ответы
+    reply_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    
+    # Закрепленные сообщения
+    is_pinned = Column(Boolean, default=False)
+    pinned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    pinned_at = Column(DateTime, nullable=True)
+    
+    # Файлы
+    file_name = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=True)
+    file_type = Column(String, nullable=True)  # image, video, audio, document
+    file_data = Column(LargeBinary, nullable=True)  # Для хранения файлов в БД (опционально)
 
-    user = relationship("User", back_populates="messages")
+    user = relationship("User", back_populates="messages", foreign_keys=[user_id])
     room = relationship("Room", back_populates="messages")
+    reply_to = relationship("Message", remote_side=[id], backref="replies")
+    pinned_by_user = relationship("User", foreign_keys=[pinned_by])
 
 
 class DirectMessage(Base):
@@ -65,9 +88,20 @@ class DirectMessage(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    
+    # Файлы в личных сообщениях
+    file_name = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=True)
+    file_type = Column(String, nullable=True)
+    file_data = Column(LargeBinary, nullable=True)
+    
+    # Цитирование
+    reply_to_id = Column(Integer, ForeignKey("direct_messages.id"), nullable=True)
 
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_dms")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_dms")
+    reply_to = relationship("DirectMessage", remote_side=[id], backref="replies")
 
 
 def generate_salt() -> str:

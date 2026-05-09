@@ -64,6 +64,22 @@ class MessageCreate(BaseModel):
     content: str
     room_id: Optional[int] = None
     receiver_id: Optional[int] = None
+    reply_to_id: Optional[int] = None  # Для цитирования/ответов
+    file_name: Optional[str] = None
+    file_type: Optional[str] = None
+    file_data: Optional[str] = None  # Base64 encoded
+
+class MessageEdit(BaseModel):
+    content: str
+
+class PinMessageRequest(BaseModel):
+    pinned: bool
+
+class ReadStatusUpdate(BaseModel):
+    message_ids: List[int]
+
+class ThemeUpdate(BaseModel):
+    theme: str  # "light" or "dark"
 
 class GameStatusUpdate(BaseModel):
     game_name: Optional[str] = None
@@ -174,20 +190,30 @@ async def get_me(user: User = Depends(get_current_user)):
         "created_at": user.created_at.isoformat(),
         "last_seen": user.last_seen.isoformat(),
         "is_online": user.is_online,
+        "theme": user.theme,
         "status": user_status.get(user.id, {})
     }
 
+@app.post("/users/me/theme")
+async def update_theme(request: ThemeUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Обновить тему пользователя"""
+    if request.theme not in ["light", "dark"]:
+        raise HTTPException(status_code=400, detail="Theme must be 'light' or 'dark'")
+    
+    user.theme = request.theme
+    db.commit()
+    return {"theme": user.theme}
+
 @app.get("/users")
-async def get_all_users(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    users = db.query(User).all()
+async def get_all_users(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Получить список всех пользователей (доступно всем авторизованным)"""
+    users = db.query(User).filter(User.id != user.id).all()
     return [{
         "id": u.id,
         "username": u.username,
         "is_admin": u.is_admin,
-        "is_banned": u.is_banned,
-        "created_at": u.created_at.isoformat(),
-        "last_seen": u.last_seen.isoformat(),
         "is_online": u.id in connected_users,
+        "last_seen": u.last_seen.isoformat() if u.last_seen else None,
         "status": user_status.get(u.id, {})
     } for u in users]
 
@@ -277,32 +303,157 @@ async def get_room_messages(room_id: int, limit: int = 50, offset: int = 0,
         "user_id": m.user_id,
         "username": m.user.username,
         "created_at": m.created_at.isoformat(),
-        "is_edited": m.is_edited
+        "is_edited": m.is_edited,
+        "is_read": m.is_read,
+        "read_at": m.read_at.isoformat() if m.read_at else None,
+        "is_pinned": m.is_pinned,
+        "reply_to_id": m.reply_to_id,
+        "file_name": m.file_name,
+        "file_type": m.file_type,
+        "file_size": m.file_size
     } for m in reversed(messages)]
 
 @app.get("/dms")
 async def get_dms(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     dms = db.query(DirectMessage).filter(
-        ((DirectMessage.sender_id == user.id) | (DirectMessage.receiver_id == user.id)) &
-        (DirectMessage.is_read == False)
-    ).all()
+        ((DirectMessage.sender_id == user.id) | (DirectMessage.receiver_id == user.id))
+    ).order_by(DirectMessage.created_at.desc()).limit(50).all()
     return [{
         "id": dm.id,
         "sender_id": dm.sender_id,
         "sender_username": dm.sender.username,
         "receiver_id": dm.receiver_id,
         "content": dm.content,
-        "created_at": dm.created_at.isoformat()
+        "created_at": dm.created_at.isoformat(),
+        "is_read": dm.is_read,
+        "read_at": dm.read_at.isoformat() if dm.read_at else None,
+        "reply_to_id": dm.reply_to_id,
+        "file_name": dm.file_name,
+        "file_type": dm.file_type
     } for dm in dms]
 
-@app.post("/messages/delete/{message_id}")
-async def delete_message(message_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+@app.get("/dms/{user_id}")
+async def get_dm_history(target_user_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Получить историю личных сообщений с конкретным пользователем"""
+    dms = db.query(DirectMessage).filter(
+        ((DirectMessage.sender_id == user.id) & (DirectMessage.receiver_id == target_user_id)) |
+        ((DirectMessage.sender_id == target_user_id) & (DirectMessage.receiver_id == user.id))
+    ).order_by(DirectMessage.created_at.asc()).limit(100).all()
+    
+    # Отметить как прочитанные сообщения от другого пользователя
+    for dm in dms:
+        if dm.receiver_id == user.id and not dm.is_read:
+            dm.is_read = True
+            dm.read_at = datetime.utcnow()
+    db.commit()
+    
+    return [{
+        "id": dm.id,
+        "sender_id": dm.sender_id,
+        "sender_username": dm.sender.username,
+        "receiver_id": dm.receiver_id,
+        "content": dm.content,
+        "created_at": dm.created_at.isoformat(),
+        "is_read": dm.is_read,
+        "reply_to_id": dm.reply_to_id,
+        "file_name": dm.file_name,
+        "file_type": dm.file_type
+    } for dm in dms]
+
+@app.post("/messages/{message_id}/edit")
+async def edit_message(message_id: int, request: MessageEdit, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Редактировать свое сообщение"""
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
+    if message.user_id != user.id and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Can only edit your own messages")
+    
+    message.content = request.content
+    message.is_edited = True
+    db.commit()
+    
+    # Уведомить комнату
+    if message.room_id:
+        await broadcast_to_room(message.room_id, {
+            "type": "message_edited",
+            "message_id": message_id,
+            "room_id": message.room_id,
+            "content": request.content,
+            "is_edited": True
+        })
+    
+    return {"message": "Message edited", "content": request.content}
+
+@app.post("/messages/{message_id}/pin")
+async def pin_message(message_id: int, request: PinMessageRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Закрепить/открепить сообщение"""
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can pin messages")
+    
+    message.is_pinned = request.pinned
+    if request.pinned:
+        message.pinned_by = user.id
+        message.pinned_at = datetime.utcnow()
+    else:
+        message.pinned_by = None
+        message.pinned_at = None
+    db.commit()
+    
+    # Уведомить комнату
+    if message.room_id:
+        await broadcast_to_room(message.room_id, {
+            "type": "message_pinned",
+            "message_id": message_id,
+            "room_id": message.room_id,
+            "is_pinned": request.pinned,
+            "pinned_by": user.username if request.pinned else None
+        })
+    
+    return {"message": f"Message {'pinned' if request.pinned else 'unpinned'}"}
+
+@app.post("/messages/read")
+async def mark_messages_read(request: ReadStatusUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Отметить сообщения как прочитанные"""
+    updated = 0
+    for msg_id in request.message_ids:
+        message = db.query(Message).filter(Message.id == msg_id).first()
+        if message and message.user_id != user.id:
+            message.is_read = True
+            message.read_at = datetime.utcnow()
+            updated += 1
+    
+    # Для личных сообщений
+    for msg_id in request.message_ids:
+        dm = db.query(DirectMessage).filter(DirectMessage.id == msg_id).first()
+        if dm and dm.receiver_id == user.id and not dm.is_read:
+            dm.is_read = True
+            dm.read_at = datetime.utcnow()
+            updated += 1
+    
+    db.commit()
+    return {"updated": updated}
+
+@app.post("/messages/delete/{message_id}")
+async def delete_message(message_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Удалить сообщение (админ или автор)"""
+    message = db.query(Message).filter(Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    if message.user_id != user.id and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Can only delete your own messages")
+    
     message.is_deleted = True
-    message.content = "[Сообщение удалено модератором]"
+    if user.is_admin:
+        message.content = "[Сообщение удалено модератором]"
+    else:
+        message.content = "[Сообщение удалено]"
     db.commit()
     
     # Уведомить подключенных пользователей в комнате
@@ -315,6 +466,29 @@ async def delete_message(message_id: int, admin: User = Depends(require_admin), 
         await broadcast_to_room(message.room_id, broadcast_data)
     
     return {"message": "Message deleted"}
+
+@app.get("/messages/search")
+async def search_messages(q: str, room_id: Optional[int] = None, limit: int = 20,
+                          user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Поиск по истории сообщений"""
+    query = db.query(Message).filter(
+        Message.content.ilike(f"%{q}%"),
+        Message.is_deleted == False
+    )
+    
+    if room_id:
+        query = query.filter(Message.room_id == room_id)
+    
+    messages = query.order_by(Message.created_at.desc()).limit(limit).all()
+    
+    return [{
+        "id": m.id,
+        "content": m.content,
+        "user_id": m.user_id,
+        "username": m.user.username,
+        "room_id": m.room_id,
+        "created_at": m.created_at.isoformat()
+    } for m in messages]
 
 # Server stats endpoint
 @app.get("/admin/stats", response_model=ServerStats)
@@ -464,12 +638,30 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                 elif action == "send_message":
                     content = message.get("content")
                     room_id = message.get("room_id")
+                    receiver_id = message.get("receiver_id")
+                    reply_to_id = message.get("reply_to_id")
+                    file_name = message.get("file_name")
+                    file_type = message.get("file_type")
+                    file_data = message.get("file_data")  # Base64
+                    
+                    import base64
+                    binary_data = None
+                    if file_data:
+                        try:
+                            binary_data = base64.b64decode(file_data)
+                        except:
+                            pass
                     
                     if room_id and content:
                         msg = Message(
                             content=content,
                             user_id=user_id,
-                            room_id=room_id
+                            room_id=room_id,
+                            reply_to_id=reply_to_id,
+                            file_name=file_name,
+                            file_type=file_type,
+                            file_size=len(binary_data) if binary_data else None,
+                            file_data=binary_data
                         )
                         db.add(msg)
                         db.commit()
@@ -483,19 +675,25 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                                 "user_id": user_id,
                                 "username": user.username,
                                 "room_id": room_id,
-                                "created_at": msg.created_at.isoformat()
+                                "created_at": msg.created_at.isoformat(),
+                                "reply_to_id": msg.reply_to_id,
+                                "file_name": msg.file_name,
+                                "file_type": msg.file_type,
+                                "file_size": msg.file_size
                             }
                         })
-                
-                elif action == "send_dm":
-                    content = message.get("content")
-                    receiver_id = message.get("receiver_id")
                     
-                    if receiver_id and content:
+                    # Личное сообщение
+                    elif receiver_id and content:
                         dm = DirectMessage(
                             sender_id=user_id,
                             receiver_id=receiver_id,
-                            content=content
+                            content=content,
+                            reply_to_id=reply_to_id,
+                            file_name=file_name,
+                            file_type=file_type,
+                            file_size=len(binary_data) if binary_data else None,
+                            file_data=binary_data
                         )
                         db.add(dm)
                         db.commit()
@@ -509,9 +707,24 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                                     "sender_id": user_id,
                                     "sender_username": user.username,
                                     "content": content,
-                                    "created_at": dm.created_at.isoformat()
+                                    "created_at": dm.created_at.isoformat(),
+                                    "reply_to_id": dm.reply_to_id,
+                                    "file_name": dm.file_name,
+                                    "file_type": dm.file_type
                                 }
                             }))
+                        
+                        # Отправить отправителю подтверждение
+                        await websocket.send_text(json.dumps({
+                            "type": "dm_sent",
+                            "message": {
+                                "id": dm.id,
+                                "sender_id": user_id,
+                                "receiver_id": receiver_id,
+                                "content": content,
+                                "created_at": dm.created_at.isoformat()
+                            }
+                        }))
                 
                 elif action == "typing":
                     room_id = message.get("room_id")
