@@ -1267,18 +1267,35 @@
         }
     }
 
-    function appendMessage(content, username, time, isOwn, msgId, userId, isEdited = false) {
+    function appendMessage(content, username, time, isOwn, msgId, userId, isEdited = false, fileName = null, fileType = null, replyToId = null) {
         const messagesDiv = document.getElementById('messages');
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${isOwn ? 'own' : ''}`;
+        if (msgId) msgDiv.setAttribute('data-message-id', msgId);
+        
         const date = new Date(time).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        // Иконка файла если есть
+        let fileHtml = '';
+        if (fileName) {
+            const icon = fileType?.startsWith('image/') ? '🖼️' : fileType?.startsWith('video/') ? '🎬' : fileType?.startsWith('audio/') ? '🎵' : '📎';
+            fileHtml = `<div class="file-attachment">${icon} ${fileName}</div>`;
+        }
+        
+        // Цитата если есть
+        let replyHtml = '';
+        if (replyToId) {
+            replyHtml = `<div class="message-reply">↩ Ответ</div>`;
+        }
 
         msgDiv.innerHTML = `
             <div class="message-avatar">${username[0].toUpperCase()}</div>
             <div class="message-content">
                 ${!isOwn ? `<div class="message-sender">${username}</div>` : ''}
+                ${replyHtml}
+                ${fileHtml}
                 <div class="message-text">${content}</div>
-                ${isEdited ? '<div class="message-edited">(ред.)</div>' : ''}
+                ${isEdited ? '<span class="message-edited">(ред.)</span>' : ''}
                 <div class="message-time">${date}</div>
             </div>
         `;
@@ -1291,8 +1308,40 @@
         const content = input.value.trim();
         if (!content || !currentRoom) return;
 
-        ws.send(JSON.stringify({ action: 'message', content: content }));
+        ws.send(JSON.stringify({ 
+            action: 'send_message', 
+            content: content,
+            room_id: currentRoom
+        }));
         input.value = '';
+    }
+    
+    function sendDM(receiverId, content, replyToId = null) {
+        if (!content) return;
+        
+        ws.send(JSON.stringify({ 
+            action: 'send_message', 
+            content: content,
+            receiver_id: receiverId,
+            reply_to_id: replyToId
+        }));
+    }
+    
+    function sendFile(file, roomId = null, receiverId = null) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Data = e.target.result.split(',')[1];
+            ws.send(JSON.stringify({
+                action: 'send_message',
+                content: `📎 Файл: ${file.name}`,
+                room_id: roomId,
+                receiver_id: receiverId,
+                file_name: file.name,
+                file_type: file.type,
+                file_data: base64Data
+            }));
+        };
+        reader.readAsDataURL(file);
     }
 
     function handleEnter(e) {
@@ -1325,20 +1374,58 @@
                 return;
             }
 
-            if (data.type === 'message') {
-                appendMessage(data.content, data.username, data.created_at, data.username === currentUser, null, data.user_id, data.is_edited);
+            if (data.type === 'new_message') {
+                const msg = data.message;
+                appendMessage(
+                    msg.content, 
+                    msg.username, 
+                    msg.created_at, 
+                    msg.user_id === currentUserId, 
+                    msg.id, 
+                    msg.user_id, 
+                    msg.is_edited,
+                    msg.file_name,
+                    msg.file_type,
+                    msg.reply_to_id
+                );
+            } else if (data.type === 'new_dm') {
+                showNotification(`Новое ЛС от ${data.message.sender_username}: ${data.message.content}`);
+                loadDMConversations();
+            } else if (data.type === 'dm_sent') {
+                // Подтверждение отправки ЛС
+                loadDMConversations();
+            } else if (data.type === 'message_edited') {
+                // Обновление отредактированного сообщения
+                const msgEl = document.querySelector(`[data-message-id="${data.message_id}"]`);
+                if (msgEl) {
+                    msgEl.querySelector('.message-text').textContent = data.content;
+                    if (!msgEl.querySelector('.message-edited')) {
+                        const editBadge = document.createElement('span');
+                        editBadge.className = 'message-edited';
+                        editBadge.textContent = ' (ред.)';
+                        msgEl.querySelector('.message-text').appendChild(editBadge);
+                    }
+                }
+            } else if (data.type === 'message_pinned') {
+                showNotification(data.is_pinned ? `📌 Сообщение закреплено ${data.pinned_by}` : '📌 Сообщение откреплено');
+            } else if (data.type === 'message_deleted') {
+                const msgEl = document.querySelector(`[data-message-id="${data.message_id}"]`);
+                if (msgEl) {
+                    msgEl.querySelector('.message-text').textContent = '[Сообщение удалено]';
+                }
             } else if (data.type === 'system') {
                 const messagesDiv = document.getElementById('messages');
                 const sysDiv = document.createElement('div');
                 sysDiv.className = 'system-message';
                 sysDiv.textContent = data.content;
                 messagesDiv.appendChild(sysDiv);
-            } else if (data.type === 'dm') {
-                showNotification(`Новое ЛС от ${data.sender}: ${data.content}`);
-                loadDMConversations();
             } else if (data.type === 'user_status') {
-                // Обработка обновления статуса пользователя (включая игру)
                 handleUserStatusUpdate(data.user_id, data.status);
+            } else if (data.type === 'all_statuses') {
+                // Загрузка всех статусов при подключении
+                for (const [userId, status] of Object.entries(data.statuses)) {
+                    handleUserStatusUpdate(parseInt(userId), status);
+                }
             }
         };
 
