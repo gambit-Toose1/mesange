@@ -1780,6 +1780,58 @@
             console.error('Ошибка загрузки сообщений:', e);
         }
     }
+
+    // Проверка авторизации при загрузке страницы
+    async function checkAuth() {
+        const token = localStorage.getItem('token');
+        if (!token) return false;
+
+        try {
+            const response = await fetch('/api/users/me', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                localStorage.removeItem('token');
+                return false;
+            }
+
+            const user = await response.json();
+            currentUser = user.username;
+            currentUserId = user.id;
+            isAdmin = user.is_admin;
+
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('app-screen').style.display = 'flex';
+            setTimeout(() => document.getElementById('app-screen').classList.add('visible'), 50);
+
+            document.getElementById('current-user').textContent = currentUser;
+            document.getElementById('user-id').textContent = currentUserId;
+            document.getElementById('user-avatar').textContent = currentUser[0].toUpperCase();
+
+            if (isAdmin) {
+                document.getElementById('admin-badge').style.display = 'inline-block';
+                document.body.classList.add('admin');
+            }
+
+            loadRooms();
+            loadDMConversations();
+            connectWebSocket();
+            startGameDetection();
+            return true;
+        } catch (e) {
+            console.error('Ошибка проверки токена:', e);
+            localStorage.removeItem('token');
+            return false;
+        }
+    }
+
+    // Инициализация приложения
+    window.addEventListener('DOMContentLoaded', () => {
+        checkAuth();
+    });
 </script>
 </body>
 </html>
