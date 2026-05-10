@@ -25,7 +25,7 @@ class User(Base):
     # Theme preference
     theme = Column(String, default="light")  # "light" or "dark"
 
-    messages = relationship("Message", back_populates="user", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="user", foreign_keys="[Message.user_id]", cascade="all, delete-orphan")
     sent_dms = relationship("DirectMessage", foreign_keys="DirectMessage.sender_id", back_populates="sender")
     received_dms = relationship("DirectMessage", foreign_keys="DirectMessage.receiver_id", back_populates="receiver")
 
