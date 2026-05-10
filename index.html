@@ -1090,6 +1090,11 @@
                 currentUserId = data.user_id;
                 isAdmin = data.is_admin;
 
+                // Сохраняем токен если он есть в ответе
+                if (data.access_token) {
+                    localStorage.setItem('token', data.access_token);
+                }
+
                 document.getElementById('auth-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'flex';
                 setTimeout(() => document.getElementById('app-screen').classList.add('visible'), 50);
@@ -1101,6 +1106,8 @@
                 if (isAdmin) {
                     document.getElementById('admin-badge').style.display = 'inline-block';
                     document.body.classList.add('admin');
+                    // Перенаправляем админа в админ-панель
+                    window.location.href = '/admin';
                 }
 
                 showNotification(`Добро пожаловать, ${username}!`);
