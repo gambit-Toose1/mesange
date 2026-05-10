@@ -1085,39 +1085,39 @@
             });
             const data = await response.json();
 
-            if (data.success) {
-                currentUser = data.username;
-                currentUserId = data.user_id;
-                isAdmin = data.is_admin;
-
-                // Сохраняем токен если он есть в ответе
-                if (data.access_token) {
-                    localStorage.setItem('token', data.access_token);
-                }
-
-                document.getElementById('auth-screen').style.display = 'none';
-                document.getElementById('app-screen').style.display = 'flex';
-                setTimeout(() => document.getElementById('app-screen').classList.add('visible'), 50);
-
-                document.getElementById('current-user').textContent = currentUser;
-                document.getElementById('user-id').textContent = currentUserId;
-                document.getElementById('user-avatar').textContent = currentUser[0].toUpperCase();
-
-                if (isAdmin) {
-                    document.getElementById('admin-badge').style.display = 'inline-block';
-                    document.body.classList.add('admin');
-                    // Админ может перейти в админ-панель через меню
-                }
-
-                showNotification(`Добро пожаловать, ${username}!`);
-                loadRooms();
-                loadDMConversations();
-                connectWebSocket();
-                startGameDetection();
-            } else {
-                errorDiv.textContent = data.error || 'Ошибка авторизации';
+            if (!response.ok) {
+                errorDiv.textContent = data.detail || 'Ошибка авторизации';
                 errorDiv.classList.add('show');
+                return;
             }
+
+            currentUser = data.username;
+            currentUserId = data.user_id;
+            isAdmin = data.is_admin;
+
+            // Сохраняем токен
+            if (data.access_token) {
+                localStorage.setItem('token', data.access_token);
+            }
+
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('app-screen').style.display = 'flex';
+            setTimeout(() => document.getElementById('app-screen').classList.add('visible'), 50);
+
+            document.getElementById('current-user').textContent = currentUser;
+            document.getElementById('user-id').textContent = currentUserId;
+            document.getElementById('user-avatar').textContent = currentUser[0].toUpperCase();
+
+            if (isAdmin) {
+                document.getElementById('admin-badge').style.display = 'inline-block';
+                document.body.classList.add('admin');
+            }
+
+            showNotification(`Добро пожаловать, ${username}!`);
+            loadRooms();
+            loadDMConversations();
+            connectWebSocket();
+            startGameDetection();
         } catch (e) {
             errorDiv.textContent = 'Ошибка соединения с сервером';
             errorDiv.classList.add('show');
@@ -1126,7 +1126,21 @@
 
     async function loadRooms() {
         try {
-            const response = await fetch('/api/rooms');
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/rooms', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+                throw new Error('Failed to load rooms');
+            }
+            
             const rooms = await response.json();
 
             const roomsList = document.getElementById('rooms-list');
