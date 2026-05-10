@@ -931,11 +931,17 @@
         <button class="icon-btn" onclick="toggleAdminPanel()">✕</button>
     </div>
     <div class="admin-section">
+        <h3>📊 Статистика сервера</h3>
+        <div id="server-info">
+            <p>Загрузка...</p>
+        </div>
+    </div>
+    <div class="admin-section">
         <h3>👥 Пользователи</h3>
         <div id="users-list"></div>
     </div>
     <div class="admin-section">
-        <h3>📊 Статистика</h3>
+        <h3>📈 Общая статистика</h3>
         <p>Пользователей: <span id="total-users">0</span></p>
         <p>Комнат: <span id="total-rooms">0</span></p>
         <p>Сообщений: <span id="total-messages">0</span></p>
@@ -1490,13 +1496,27 @@
 
     async function loadAdminData() {
         try {
-            const usersResponse = await fetch(`/api/admin/users?username=${currentUser}`);
-            const users = await usersResponse.json();
-
+            // Загружаем метрики админ-панели
+            const metricsResponse = await fetch(`/api/admin/metrics`, {
+                headers: { 'X-User-ID': localStorage.getItem('user_id') }
+            });
+            
+            if (!metricsResponse.ok) {
+                throw new Error('Failed to load admin metrics');
+            }
+            
+            const metrics = await metricsResponse.json();
+            
             const usersList = document.getElementById('users-list');
             usersList.innerHTML = '';
 
             onlineUsers = [];
+
+            // Получаем всех пользователей
+            const usersResponse = await fetch(`/users`, {
+                headers: { 'X-User-ID': localStorage.getItem('user_id') }
+            });
+            const users = await usersResponse.json();
 
             users.forEach(user => {
                 if (user.is_online) onlineUsers.push(user.username);
@@ -1519,13 +1539,21 @@
                 usersList.appendChild(div);
             });
 
-            const statsResponse = await fetch(`/api/admin/stats?username=${currentUser}`);
-            const stats = await statsResponse.json();
-
-            document.getElementById('total-users').textContent = stats.total_users;
-            document.getElementById('total-rooms').textContent = stats.total_rooms;
-            document.getElementById('total-messages').textContent = stats.total_messages;
-            document.getElementById('online-users').textContent = stats.online_users;
+            // Обновляем статистику сервера
+            document.getElementById('total-users').textContent = metrics.stats.total_users;
+            document.getElementById('total-rooms').textContent = metrics.stats.total_rooms;
+            document.getElementById('total-messages').textContent = metrics.stats.total_messages;
+            document.getElementById('online-users').textContent = metrics.stats.active_users;
+            
+            // Обновляем информацию о нагрузке сервера
+            const serverInfo = document.getElementById('server-info');
+            if (serverInfo) {
+                serverInfo.innerHTML = `
+                    <p>CPU: ${metrics.server.cpu_percent.toFixed(1)}%</p>
+                    <p>RAM: ${metrics.server.memory_percent.toFixed(1)}%</p>
+                    <p>Uptime: ${(metrics.server.uptime / 3600).toFixed(2)} ч</p>
+                `;
+            }
 
             updateGameOverlay();
         } catch (e) {

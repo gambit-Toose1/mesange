@@ -409,6 +409,7 @@ async def delete_message(message_id: int, request: Request, db: Session = Depend
 # Server stats endpoint
 @app.get("/admin/stats", response_model=ServerStats)
 async def get_server_stats(request: Request):
+    admin = require_admin(request, next(get_db()))
     boot_time = psutil.boot_time()
     uptime = time.time() - boot_time
     
@@ -434,6 +435,56 @@ async def get_server_stats(request: Request):
         platform=f"{platform.system()} {platform.release()}",
         python_version=platform.python_version()
     )
+
+# Новый эндпоинт для метрик админ-панели
+@app.get("/api/admin/metrics")
+async def get_admin_metrics(request: Request, db: Session = Depends(get_db)):
+    """Полные метрики для админ-панели в реальном времени"""
+    admin = require_admin(request, db)
+    
+    # Получаем ошибки из логов (последние 10)
+    recent_errors = []
+    
+    # Активные пользователи с деталями
+    active_users_list = []
+    for uid, ws in connected_users.items():
+        user = db.query(User).filter(User.id == uid).first()
+        if user:
+            status_info = user_status.get(uid, {})
+            active_users_list.append({
+                "id": uid,
+                "username": user.username,
+                "game": status_info.get("game"),
+                "is_playing": status_info.get("is_playing", False),
+                "details": status_info.get("details"),
+                "connected_at": status_info.get("connected_at")
+            })
+    
+    boot_time = psutil.boot_time()
+    uptime = time.time() - boot_time
+    
+    return {
+        "server": {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "memory_used": psutil.virtual_memory().used,
+            "memory_total": psutil.virtual_memory().total,
+            "disk_percent": psutil.disk_usage('/').percent,
+            "uptime": uptime,
+            "platform": f"{platform.system()} {platform.release()}",
+            "python_version": platform.python_version()
+        },
+        "stats": {
+            "active_users": len(connected_users),
+            "total_users": db.query(User).count(),
+            "total_rooms": db.query(Room).count(),
+            "total_messages": db.query(Message).count(),
+            "online_users": db.query(User).filter(User.is_online == True).count()
+        },
+        "active_users": active_users_list,
+        "recent_errors": recent_errors,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 # Game status endpoint
 @app.post("/user/status/game")
