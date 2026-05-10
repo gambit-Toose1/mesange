@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session, joinedload
-from database import Base, get_db, engine
+from database import Base, get_db, engine, init_db
 from models import User, Room, Message, DirectMessage, hash_password, verify_password, generate_salt
 import jwt
 import secrets
@@ -26,6 +26,9 @@ import secrets
 SECRET_KEY = secrets.token_hex(32)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 дней
+
+# Инициализация базы данных
+init_db()
 
 app = FastAPI(title="Mesange Messenger API", version="2.0.0")
 
