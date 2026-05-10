@@ -159,7 +159,7 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
         is_admin=user.is_admin
     )
 
-@app.post("/auth/login", response_model=TokenResponse)
+@app.post("/api/login", response_model=TokenResponse)
 async def login(request: AuthRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == request.username).first()
     if not user or not verify_password(request.password, user.password_hash, user.salt):
