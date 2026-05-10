@@ -130,7 +130,7 @@ def require_admin(user: User = Depends(get_current_user)):
     return user
 
 # Auth endpoints
-@app.post("/auth/register", response_model=TokenResponse)
+@app.post("/api/register", response_model=TokenResponse)
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == request.username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
