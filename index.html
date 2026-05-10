@@ -1094,10 +1094,13 @@
             currentUser = data.username;
             currentUserId = data.user_id;
             isAdmin = data.is_admin;
+            currentUser = data.username;
 
-            // Сохраняем токен
-            if (data.access_token) {
-                localStorage.setItem('token', data.access_token);
+            // Сохраняем user_id вместо токена
+            if (data.user_id) {
+                localStorage.setItem('user_id', data.user_id.toString());
+                localStorage.setItem('username', data.username);
+                localStorage.setItem('is_admin', data.is_admin ? 'true' : 'false');
             }
 
             document.getElementById('auth-screen').style.display = 'none';
@@ -1126,10 +1129,10 @@
 
     async function loadRooms() {
         try {
-            const token = localStorage.getItem('token');
+            const userId = localStorage.getItem('user_id');
             const response = await fetch('/api/rooms', {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'X-User-ID': userId || ''
                 }
             });
             
@@ -1374,19 +1377,33 @@
 
         ws.onopen = () => {
             console.log('WebSocket подключен');
-            if (currentRoom) {
-                ws.send(JSON.stringify({
-                    action: 'join_room',
-                    room_id: currentRoom,
-                    username: currentUser,
-                    user_id: currentUserId
-                }));
-            }
-            if (isAdmin) loadAdminData();
+            // Отправляем авторизацию с user_id
+            ws.send(JSON.stringify({
+                type: 'auth',
+                user_id: currentUserId || parseInt(localStorage.getItem('user_id'))
+            }));
         };
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
+
+            // Обработка успешной авторизации в WebSocket
+            if (data.type === 'auth_success') {
+                console.log('WebSocket авторизация успешна:', data.username);
+                currentUserId = data.user_id;
+                currentUser = data.username;
+                isAdmin = data.is_admin;
+                
+                // Теперь входим в комнату и загружаем данные админа
+                if (currentRoom) {
+                    ws.send(JSON.stringify({
+                        action: 'join_room',
+                        room_id: currentRoom
+                    }));
+                }
+                if (isAdmin) loadAdminData();
+                return;
+            }
 
             if (data.type === 'kicked') {
                 alert(data.content);
@@ -1783,18 +1800,20 @@
 
     // Проверка авторизации при загрузке страницы
     async function checkAuth() {
-        const token = localStorage.getItem('token');
-        if (!token) return false;
+        const userId = localStorage.getItem('user_id');
+        if (!userId) return false;
 
         try {
             const response = await fetch('/api/users/me', {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'X-User-ID': userId
                 }
             });
 
             if (!response.ok) {
-                localStorage.removeItem('token');
+                localStorage.removeItem('user_id');
+                localStorage.removeItem('username');
+                localStorage.removeItem('is_admin');
                 return false;
             }
 
@@ -1822,8 +1841,10 @@
             startGameDetection();
             return true;
         } catch (e) {
-            console.error('Ошибка проверки токена:', e);
-            localStorage.removeItem('token');
+            console.error('Ошибка проверки авторизации:', e);
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('username');
+            localStorage.removeItem('is_admin');
             return false;
         }
     }
