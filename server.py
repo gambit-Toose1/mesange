@@ -10,7 +10,7 @@ import platform
 import time
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -187,16 +187,16 @@ async def get_admin():
 
 # Auth endpoints
 @app.post("/api/register", response_model=LoginResponse)
-async def register(request: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.username == request.username).first():
+async def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
     
     salt = generate_salt()
-    password_hash = hash_password(request.password, salt)
+    password_hash = hash_password(password, salt)
     
     is_first_user = db.query(User).count() == 0
     user = User(
-        username=request.username,
+        username=username,
         password_hash=password_hash,
         salt=salt,
         is_admin=is_first_user
@@ -214,9 +214,9 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     )
 
 @app.post("/api/login", response_model=LoginResponse)
-async def login(request: AuthRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == request.username).first()
-    if not user or not verify_password(request.password, user.password_hash, user.salt):
+async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not verify_password(password, user.password_hash, user.salt):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.is_banned:
         raise HTTPException(status_code=403, detail="Account is banned")
