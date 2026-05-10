@@ -760,6 +760,86 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                 user_status[user_id]["is_playing"] = False
                 await broadcast_user_status(user_id, user_status[user_id])
 
+# Главная страница
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesange Messenger</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            padding: 40px;
+        }
+        h1 {
+            color: #4ecca3;
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            color: #ccc;
+        }
+        .links {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        a {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #4ecca3;
+            color: #1a1a2e;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: transform 0.2s, background 0.2s;
+        }
+        a:hover {
+            transform: translateY(-2px);
+            background: #66d9b8;
+        }
+        .api-link {
+            background: transparent;
+            border: 2px solid #4ecca3;
+            color: #4ecca3;
+        }
+        .api-link:hover {
+            background: #4ecca3;
+            color: #1a1a2e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕊️ Mesange Messenger</h1>
+        <p>Добро пожаловать в современный мессенджер с поддержкой игр и админ-панелью.</p>
+        <div class="links">
+            <a href="/admin">Админ-панель</a>
+            <a href="/docs" class="api-link">API Документация</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
 # Admin panel HTML
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
