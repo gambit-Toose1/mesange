@@ -825,17 +825,243 @@ async def root():
             background: #4ecca3;
             color: #1a1a2e;
         }
+        .form-container {
+            max-width: 400px;
+            margin: 40px auto;
+            padding: 30px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4ecca3;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #4ecca3;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            color: #eee;
+            font-size: 1rem;
+        }
+        input:focus {
+            outline: none;
+            background: rgba(255,255,255,0.15);
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            background: #66d9b8;
+        }
+        .toggle-form {
+            margin-top: 20px;
+            color: #ccc;
+        }
+        .toggle-form a {
+            color: #4ecca3;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .message {
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            display: none;
+        }
+        .message.success {
+            background: rgba(78, 204, 163, 0.2);
+            border: 1px solid #4ecca3;
+            color: #4ecca3;
+        }
+        .message.error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+            color: #ef4444;
+        }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🕊️ Mesange Messenger</h1>
         <p>Добро пожаловать в современный мессенджер с поддержкой игр и админ-панелью.</p>
-        <div class="links">
+        
+        <div id="authForms" class="form-container">
+            <div id="message" class="message"></div>
+            
+            <!-- Login Form -->
+            <div id="loginForm">
+                <h2 style="color: #4ecca3; margin-bottom: 20px;">Вход</h2>
+                <div class="form-group">
+                    <label for="loginUsername">Имя пользователя</label>
+                    <input type="text" id="loginUsername" placeholder="Введите имя пользователя">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Пароль</label>
+                    <input type="password" id="loginPassword" placeholder="Введите пароль">
+                </div>
+                <button onclick="login()">Войти</button>
+                <div class="toggle-form">
+                    Нет аккаунта? <a onclick="showRegister()">Зарегистрироваться</a>
+                </div>
+            </div>
+            
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <h2 style="color: #4ecca3; margin-bottom: 20px;">Регистрация</h2>
+                <div class="form-group">
+                    <label for="regUsername">Имя пользователя</label>
+                    <input type="text" id="regUsername" placeholder="Придумайте имя пользователя">
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Пароль</label>
+                    <input type="password" id="regPassword" placeholder="Придумайте пароль">
+                </div>
+                <button onclick="register()">Зарегистрироваться</button>
+                <div class="toggle-form">
+                    Уже есть аккаунт? <a onclick="showLogin()">Войти</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="links" style="margin-top: 40px;">
             <a href="/admin">Админ-панель</a>
             <a href="/docs" class="api-link">API Документация</a>
         </div>
     </div>
+    
+    <script>
+        const API_URL = '';
+        
+        function showRegister() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+            hideMessage();
+        }
+        
+        function showLogin() {
+            document.getElementById('registerForm').classList.add('hidden');
+            document.getElementById('loginForm').classList.remove('hidden');
+            hideMessage();
+        }
+        
+        function showMessage(text, isSuccess) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + (isSuccess ? 'success' : 'error');
+            msg.style.display = 'block';
+        }
+        
+        function hideMessage() {
+            document.getElementById('message').style.display = 'none';
+        }
+        
+        async function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                showMessage('Заполните все поля', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_URL + '/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Успешный вход! Перенаправление...', true);
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username);
+                    setTimeout(() => {
+                        window.location.href = '/admin';
+                    }, 1000);
+                } else {
+                    showMessage(data.detail || 'Ошибка входа', false);
+                }
+            } catch (error) {
+                showMessage('Ошибка соединения с сервером', false);
+            }
+        }
+        
+        async function register() {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            
+            if (!username || !password) {
+                showMessage('Заполните все поля', false);
+                return;
+            }
+            
+            if (username.length < 3) {
+                showMessage('Имя пользователя должно быть не менее 3 символов', false);
+                return;
+            }
+            
+            if (password.length < 4) {
+                showMessage('Пароль должен быть не менее 4 символов', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_URL + '/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Успешная регистрация! Перенаправление...', true);
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username);
+                    setTimeout(() => {
+                        window.location.href = '/admin';
+                    }, 1000);
+                } else {
+                    showMessage(data.detail || 'Ошибка регистрации', false);
+                }
+            } catch (error) {
+                showMessage('Ошибка соединения с сервером', false);
+            }
+        }
+        
+        // Обработка Enter в полях ввода
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const loginFormVisible = !document.getElementById('loginForm').classList.contains('hidden');
+                if (loginFormVisible) {
+                    login();
+                } else {
+                    register();
+                }
+            }
+        });
+    </script>
 </body>
 </html>
 """
