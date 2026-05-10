@@ -173,6 +173,18 @@ async def root():
 </html>
 """)
 
+# Маршрут для index.html - отдает основной интерфейс
+@app.get("/index.html", response_class=HTMLResponse)
+async def get_index():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+# Маршрут для админ-панели
+@app.get("/admin", response_class=HTMLResponse)
+async def get_admin():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
 # Auth endpoints
 @app.post("/api/register", response_model=LoginResponse)
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):
