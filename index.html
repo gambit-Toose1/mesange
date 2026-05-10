@@ -1106,8 +1106,7 @@
                 if (isAdmin) {
                     document.getElementById('admin-badge').style.display = 'inline-block';
                     document.body.classList.add('admin');
-                    // Перенаправляем админа в админ-панель
-                    window.location.href = '/admin';
+                    // Админ может перейти в админ-панель через меню
                 }
 
                 showNotification(`Добро пожаловать, ${username}!`);

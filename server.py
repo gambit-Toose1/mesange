@@ -1000,7 +1000,7 @@ async def root():
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('username', data.username);
                     setTimeout(() => {
-                        window.location.href = '/admin';
+                        window.location.href = '/';
                     }, 1000);
                 } else {
                     showMessage(data.detail || 'Ошибка входа', false);
@@ -1043,7 +1043,7 @@ async def root():
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('username', data.username);
                     setTimeout(() => {
-                        window.location.href = '/admin';
+                        window.location.href = '/';
                     }, 1000);
                 } else {
                     showMessage(data.detail || 'Ошибка регистрации', false);
